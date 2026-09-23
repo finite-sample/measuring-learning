@@ -1,0 +1,255 @@
+---
+title: "Measuring Learning in Informative Processes"
+author: "Robert C. Luskin, Ariel Helfer, and Gaurav Sood"
+date: "Working draft"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: true
+    number_sections: true
+    fig_caption: true
+bibliography: references.bib
+link-citations: true
+fontsize: 11pt
+geometry: margin=1in
+header-includes:
+  - \usepackage{booktabs}
+  - \usepackage{float}
+  - \usepackage{amsthm}
+  - \usepackage{caption}
+  - \captionsetup{font=small,labelfont=bf}
+  - \newtheorem{proposition}{Proposition}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center", fig.pos = "H")
+options(knitr.graphics.rel_path = FALSE)
+source("R/paper.R")
+figure <- \(name) knitr::include_graphics(normalizePath(file.path("figs", paste0(name, ".pdf"))))
+sims <- read_tab("simulations.csv")
+features <- read_tab("poll_features.csv")
+learners <- read_tab("who_learns.csv")
+attitudes <- read_tab("attitudes_summary.csv")
+plausible <- sims[sims$plausible %in% TRUE, ]
+prop <- plausible[plausible$learning_form == "proportional", ]
+add <- plausible[plausible$learning_form == "additive", ]
+catch <- plausible[plausible$learning_form == "catch_up", ]
+share_plausible <- \(form) mean(sims$plausible[sims$learning_form == form] %in% TRUE)
+med <- \(x) coef_text(stats::median(x), 2)
+pooled <- \(p) learners[learners$pollname == "Pooled estimate" & learners$proxy == p, ]
+gain_ba <- pooled("Observed gain")
+x2_ba <- pooled("Post-process knowledge")
+cond_ba <- pooled("Post-process knowledge given initial")
+polls_gain_neg <- sum(learners$estimate[learners$proxy == "Observed gain" & learners$pollname != "Pooled estimate"] < 0)
+polls_cond_neg <- sum(learners$estimate[learners$proxy == "Post-process knowledge given initial" & learners$pollname != "Pooled estimate"] < 0)
+att <- \(p, col) attitudes[[col]][attitudes$proxy == p]
+by_items <- dplyr::summarise(prop, gain = stats::median(observed_gain), x2 = stats::median(x2), .by = items) |> dplyr::arrange(items)
+```
+
+\begin{abstract}
+We often want to know how much people learn from informative processes like election campaigns and deliberative forums, and who learns the most. The obvious measure, the gain in the share of knowledge items answered correctly, is a poor indicator of true learning. We show, in a linear model, a nonlinear one and a general one, that when those who know more learn more, as the literature on prior knowledge suggests, post-process knowledge is always positively correlated with true learning, overall and among people who start with the same knowledge, while observed gain carries no such guarantee and can be negatively correlated with it. In `r count(nrow(prop))` simulated processes whose observable features match `r nrow(features)` Deliberative Polls, observed gain's median correlation with true learning is `r med(prop$observed_gain)` and post-process knowledge's is `r med(prop$x2)`. The choice matters: in the same polls, observed gain says the college-educated learn no more than others (`r interval(gain_ba$estimate, gain_ba$lower, gain_ba$upper)`), while post-process knowledge given initial knowledge says they learn more (`r interval(cond_ba$estimate, cond_ba$lower, cond_ba$upper)`).
+\end{abstract}
+
+# Introduction
+
+Many communication processes are broadly informative, exposing their participants to some goodly quantity and wide variety of information on at least one sizable topic, like policy or electoral choices. The category includes both natural processes like election campaigns and ad hoc but naturalistic ones like Deliberative Polls. The information exposure need not be the point. Often, it is not. In election campaigns, it is incidental, a by-product of persuasion or mobilization. In Deliberative Polls and other deliberative fora, it is intrinsic but instrumental---not an end in itself but an ingredient in more fully considered, better founded opinions. But in whatever fashion, for whatever reason, the exposure must occur, and at least some participants must learn something from it, or the process would be only degenerately "informative."
+
+Almost always, we are interested in this learning---sometimes in the learning of this or that particular bit, affecting this or that particular attitude [@gilens2001], but more often in the amount of topic-wide learning, affecting a wider range of attitudes, as well as vote intentions, levels of engagement, and the like [@bartels1996; @dellicarpini1996; @althaus2003]. In the aggregate, this is also normatively important, speaking to the educative value of election campaigns and the deliberative quality of deliberative fora.
+
+But how best to measure it? The obvious choice is observed knowledge gain: the increase in the proportion of knowledge items answered correctly. For aggregate description, faute de mieux, this may serve. But individual-level analyses---of learning as a function of causally prior variables or of causally subsequent ones as a function of learning---are another story. There, observed knowledge gain turns out to be a surprisingly weak indicator of true knowledge gain. This paper shows why in two models, a linear one and a nonlinear one, then generalizes the key results to any measurement function, proves that post-process knowledge does better under an assumption the data support, measures how much better in simulations calibrated to real Deliberative Polls, and shows that the choice changes substantive answers.
+
+# Observed and True Knowledge
+
+The knowledge we are used to thinking about is "observed." It is, by definition, all we ever see. Conventionally, the $i$th person's observed knowledge at time $t$---call it $x_{it}$---is the proportion of the questionnaire's knowledge items the person answers correctly. We are much less used to thinking about "true knowledge"---what observed knowledge is trying to observe. Its depths can be left to philosophy and neuroscience. Nearer the surface, we may define the $i$th person's true knowledge at time $t$---call it $X_{it}$---as the proportion of all knowable, relevant items he or she knows at time $t$. Observed knowledge gain is $\Delta x_i = x_{i2} - x_{i1}$ and true knowledge gain $\Delta X_i = X_{i2} - X_{i1}$.
+
+The set of knowable, relevant items includes everything that is relevant and knowable, whether any mortal knows it or not; on topics like policy issues, it must number at least in the hundreds of thousands. So $X_{it}$ never gets much above 0, and since very few people follow politics very closely, its distribution must be severely right-skewed. By contrast, $x_{it}$ typically ranges all the way from 0 to 1, because the questionnaire's items are a very small, very easy subset of what is knowable. Question writers do not know enough to ask the items known only by policy experts, let alone those no one knows. Of those they know, they favor relatively easy ones; otherwise, hardly anyone would score much above 0, except by lucky guessing.
+
+These facts suggest the following properties of knowledge and learning:
+
+- L1. The participants learn: $E(X_{i2}|X_{i1}) > X_{i1}$ for $X_{i1} > 0$.
+- L2. The more knowledgeable learn more: $E(\Delta X_i | X_{i1})$ increases with $X_{i1}$. More new information sticks when there is more previously cognized information for it to stick to [@recht1988; @eckhardt1991; @cooke1993; @hambrick2003].
+- L3. Those who know nothing learn nothing.
+- M1. Those who know nothing show no knowledge, and those who know the most show as much as the measure permits.
+- M2. The more knowledgeable appear to know more, but the less so, the more they know: $E(x_{it}|X_{it})$ increases with $X_{it}$ but flattens as it approaches its ceiling of 1.
+- M3. People appear to know more than they do: $E(x_{it}|X_{it}) > X_{it}$.
+- M4. The more knowledgeable appear to learn more, then, beyond a point, to learn less. Those who know nothing actually learn nothing; those who know the most, despite actually learning the most, cannot show it, having started at or near the ceiling.
+
+Three phenomena are jointly responsible for the results that follow.
+
+*Item-sampling bias.* A questionnaire's knowledge items are hardly a random draw from the universe of relevant, knowable items. They are much, much, much easier than average. Question writers cannot even think of the items known only by policy experts, much less those nobody knows. Among those they can think of, they tend to choose items that anyone paying a modicum of attention to the news should know. Otherwise, hardly anyone would score much above 0, except by lucky guessing. Thus many of the relatively knowledgeable may ace a questionnaire's knowledge items, letting $x_{it}$ range far higher than $X_{it}$, usually all the way up to 1.
+
+*Ceiling effects.* The participants who already know a lot, having a relatively high $X_{i1}$ and thus an absolutely high $x_{i1}$, cannot show much observed knowledge gain. For true knowledge, there is always room for improvement; for observed knowledge, not so.
+
+*The rich get richer.* Knowing more about something makes it easier to learn still more [@dooling1971; @bransford1972; @recht1988; @eckhardt1991; @cooke1993; @hambrick2003]. Learning is easier when the material falls effortlessly into context. Hence the participants who cannot show much observed knowledge gain are precisely those whose true knowledge gain should be greatest.
+
+These considerations yield two second-blush intuitions. First, ceiling effects and the rich getting richer should depress the correlation between $\Delta x_i$ and $\Delta X_i$. Second, $x_{i2}$ may be a better indicator. Those who emerge observably knowing a lot have generally gained a lot---either observably, if they initially knew only a little, or unobservably, if they initially knew a lot.
+
+# A Linear Model
+
+Let
+\begin{align}
+x_{i1} &= a_1 + b_1 X_{i1} + u_{i1}, \label{eq:x1}\\
+x_{i2} &= a_2 + b_2 X_{i2} + u_{i2}, \label{eq:x2}\\
+X_{i2} &= \alpha + \beta X_{i1} + v_i, \label{eq:learn}
+\end{align}
+implying
+\begin{align}
+\Delta x_i &= (a_2 - a_1) + b_2\alpha + (b_2\beta - b_1) X_{i1} + (u_{i2} - u_{i1}) + b_2 v_i, \label{eq:dx}\\
+\Delta X_i &= \alpha + (\beta - 1) X_{i1} + v_i. \label{eq:dX}
+\end{align}
+The measurement errors $u_{i1}$ and $u_{i2}$ and the disturbance $v_i$ have zero means and are uncorrelated with the $X$'s and with one another, and $\sigma^2_{X_1}$, $\sigma^2_{u_1}$, $\sigma^2_{u_2}$ and $\sigma^2_v$ are all strictly positive: there is some measurement error at each wave, true initial knowledge does not perfectly predict true later knowledge, and true initial knowledge varies.
+
+A second layer of assumptions expresses the three phenomena. *Item-sampling bias.* Those who know nothing, and do not guess, score 0, so $a_t = 0$ and $b_t = E(x_{it}|X_{it} = X_{Mt})/X_{Mt}$, where $X_{Mt}$ is the highest true knowledge in the population. Since the questionnaire lets $E(x_{it}|X_{it} = X_{Mt})$ approach 1 while $X_{Mt}$ is near 0,
+\begin{equation}
+b_1, b_2 > 1. \label{eq:bias}
+\end{equation}
+*The rich get richer.* A given difference in true initial knowledge results in a bigger difference in true later knowledge:
+\begin{equation}
+\beta > 1. \label{eq:rich}
+\end{equation}
+*Ceiling effects.* The more one knows, the less one can appear to gain: $X_{i1}$'s coefficient in (\ref{eq:dx}) is negative,
+\begin{equation}
+b_1 > b_2\beta. \label{eq:ceiling}
+\end{equation}
+
+The correlations of observed gain and of post-process knowledge with true gain are $\rho_{\Delta x \Delta X} = \sigma_{\Delta x \Delta X}/(\sigma_{\Delta x}\sigma_{\Delta X})$ and $\rho_{x_2 \Delta X} = \sigma_{x_2 \Delta X}/(\sigma_{x_2}\sigma_{\Delta X})$, where single-subscripted, squared $\sigma$'s are variances and double-subscripted ones covariances. From (\ref{eq:x1})--(\ref{eq:dX}),
+\begin{align}
+\sigma_{\Delta x \Delta X} &= (\beta - 1)(b_2\beta - b_1)\sigma^2_{X_1} + b_2\sigma^2_v, \label{eq:c1}\\
+\sigma_{x_2 \Delta X} &= (\beta - 1) b_2 \beta \sigma^2_{X_1} + b_2 \sigma^2_v, \label{eq:c2}\\
+\sigma^2_{\Delta x} &= (b_2\beta - b_1)^2 \sigma^2_{X_1} + \sigma^2_{u_1} + \sigma^2_{u_2} + b_2^2 \sigma^2_v, \label{eq:v1}\\
+\sigma^2_{x_2} &= b_2^2\beta^2\sigma^2_{X_1} + b_2^2 \sigma^2_v + \sigma^2_{u_2}. \label{eq:v2}
+\end{align}
+Three results follow (proofs in Appendix \ref{app:proofs}).
+
+*Result 1.* $\rho_{\Delta x \Delta X}$ can be negative. Specifically,
+
+- Condition 1a: $\rho_{\Delta x \Delta X} < 0$ if and only if $(\beta - 1)(b_1 - b_2\beta)\sigma^2_{X_1} - b_2\sigma^2_v > 0$.
+
+*Result 2.* $\rho_{x_2 \Delta X}$ is always positive.
+
+*Result 3.* $\rho_{\Delta x \Delta X}$ can be less than $\rho_{x_2 \Delta X}$. Each of the following is sufficient:
+
+- Condition 3a: $(b_1 - 2b_2\beta)\, b_1 \sigma^2_{X_1} + \sigma^2_{u_1} > 0$;
+- Condition 3b: $b_1 \ge 2 b_2 \beta$;
+- Condition 3c: Condition 1a;
+- Condition 3d: $\gamma_{21} < .5$, where $\gamma_{21} = \sigma_{x_1 x_2}/\sigma^2_{x_1}$ is the slope of the population regression of $x_{i2}$ on $x_{i1}$.
+
+Three points need noting. First, $\rho_{\Delta x \Delta X}$ need not be negative to be depressed: as the parameters approach a configuration under which it is negative, observed gain is enfeebled, positively but weakly correlated with true gain. Second, none of Conditions 3a--3d is necessary. Third, the most easily met is 3a. Condition 3b is sufficient but unnecessary for 3a, and 3c, though neither sufficient nor necessary for 3a, is clearly harder to meet: it is harder to get a negative $\rho_{\Delta x \Delta X}$ than one simply less than $\rho_{x_2 \Delta X}$. Condition 3d is directly checkable: in every one of the `r nrow(features)` Deliberative Polls we examine below, the observed correlation of $x_{i1}$ and $x_{i2}$ is between `r coef_text(min(features$r_x1_x2), 2)` and `r coef_text(max(features$r_x1_x2), 2)`, and the regression slope of $x_{i2}$ on $x_{i1}$ is below .5 in `r sum(features$slope_x2_x1 < .5)` of them.
+
+*Guessing.* Let people who do not know an item answer it correctly with probability $\kappa r_i$, where $r_i$ is the person's propensity to guess, the same at both waves and independent of the other variables, and $\kappa$ the chance of a lucky guess. Observed knowledge becomes $y_{it} = x_{it}(1 - \kappa r_i) + \kappa r_i$. Then $\sigma_{\Delta y \Delta X} = (1 - \kappa E(r_i))\,\sigma_{\Delta x \Delta X}$ and $\sigma_{y_2 \Delta X} = (1 - \kappa E(r_i))\,\sigma_{x_2 \Delta X}$: guessing scales both covariances by the same positive factor, so Results 1 and 2 hold as stated.
+
+# A Nonlinear Model
+
+As proportions, $x_{i1}$, $x_{i2}$ and $\Delta x_i$ are bounded, and they frequently near or equal 1. Their consequently decreasing slopes on true knowledge (M2's ceiling) are a major part of the story, which the linear model captures only through $b_1 > b_2\beta$. A quadratic measurement equation makes the ceiling explicit. Let
+\begin{align}
+X_{i2} &= \beta X_{i1}, \label{eq:q1}\\
+x_{it} &= b X_{it} + c X_{it}^2 + u_{it}, \quad t = 1, 2, \label{eq:q2}
+\end{align}
+with $\beta > 1$, $b > 0$ and $c < 0$, so that
+\begin{align}
+\Delta X_i &= (\beta - 1) X_{i1}, \\
+\Delta x_i &= (\beta - 1) b X_{i1} + (\beta^2 - 1) c X_{i1}^2 + u_{i2} - u_{i1}.
+\end{align}
+M2 requires observed knowledge to rise with true knowledge over the range of true knowledge at both waves: $b + 2cX_{it} > 0$, or $X_{M2} = \beta X_{M1} \le -b/2c$. $E(\Delta x_i|X_{i1})$, by contrast, peaks at $X_{i1} = -b/2(\beta+1)c$, below $X_{M1}$ whenever $\beta > 1$: the more knowledgeable appear to learn more, then less (M4). Writing $V$ and $C$ for variances and covariances,
+\begin{align}
+C(\Delta x_i, \Delta X_i) &= (\beta - 1)^2 [b V(X_{i1}) + (\beta + 1) c\, C(X_{i1}^2, X_{i1})], \label{eq:qc1}\\
+C(x_{i2}, \Delta X_i) &= (\beta - 1)\beta [b V(X_{i1}) + c \beta\, C(X_{i1}^2, X_{i1})], \label{eq:qc2}\\
+V(\Delta X_i) &= (\beta - 1)^2 V(X_{i1}), \\
+V(\Delta x_i) &= (\beta - 1)^2 b^2 V(X_{i1}) + (\beta^2 - 1)^2 c^2 V(X_{i1}^2) + 2 b c (\beta - 1)(\beta^2 - 1) C(X_{i1}^2, X_{i1}) + V(u_{i1}) + V(u_{i2}), \\
+V(x_{i2}) &= b^2 \beta^2 V(X_{i1}) + c^2 \beta^4 V(X_{i1}^2) + 2 b c \beta^3 C(X_{i1}^2, X_{i1}) + V(u_{i2}).
+\end{align}
+Since $X_{i1} \ge 0$, $C(X_{i1}^2, X_{i1}) > 0$, and with $c < 0$ the second term in each bracket is negative. Let $\gamma = C(X_{i1}^2, X_{i1})/V(X_{i1})$, the slope of the population regression of $X_{i1}^2$ on $X_{i1}$. Then:
+
+- R1. $\rho_{\Delta x \Delta X} > 0$ if and only if $\gamma < -b/(\beta + 1)c$.
+- R2. $\rho_{x_2 \Delta X} > 0$ if and only if $\gamma < -b/\beta c$.
+- R3. Since $-b/(\beta + 1)c < -b/\beta c$, $\rho_{\Delta x \Delta X} > 0$ implies $\rho_{x_2 \Delta X} > 0$, but not the reverse.
+- R4. Under M2, R2's condition always holds: $\rho_{x_2 \Delta X} > 0$. The bracket in (\ref{eq:qc2}) is the covariance of $X_{i1}$ with $bX_{i1} + c\beta X_{i1}^2$, a function that rises over the whole range of $X_{i1}$ when $\beta X_{M1} \le -b/2c$; the covariance of a variable with an increasing function of itself is positive. The bracket in (\ref{eq:qc1}) is the covariance of $X_{i1}$ with $bX_{i1} + (\beta + 1)cX_{i1}^2$, which rises and then falls, and can be negative.
+
+# How General Are These Results?
+
+Both models are special cases of a general one. Let each questionnaire item $j$ have a difficulty $d_j$ on the scale of true knowledge, and let a person know the item with probability $F(X_{it}, d_j)$, nondecreasing in $X_{it}$. In the simplest case $F$ is a threshold---the person knows the item if and only if $X_{it} > d_j$---and observed knowledge is $x_{it} = G(X_{it})$, where $G$ is the distribution function of the questionnaire's difficulties. An easy questionnaire concentrates its difficulties low, so $G$ rises quickly and flattens at 1. Evenly spread difficulties give a piecewise linear $G$; a smooth, concentrated distribution gives something close to the quadratic; a logistic $F$ gives an item response model. Let people who do not know an item answer it correctly by lucky guess, and let true learning be $\Delta X_i = h(X_{i1}, R_i)$, where $R_i$ collects everything other than initial knowledge that affects learning, independent of $X_{i1}$, and $h$ is nondecreasing in $R_i$.
+
+\begin{proposition}
+If $h$ is nondecreasing in $X_{i1}$ (the rich get richer), $\mathrm{Cov}(x_{i2}, \Delta X_i) \ge 0$.
+\end{proposition}
+
+\begin{proposition}
+For any $h$, $\mathrm{Cov}(x_{i2}, \Delta X_i \mid X_{i1}) \ge 0$.
+\end{proposition}
+
+Both follow from the association of independent random variables: any two nondecreasing functions of independent variables have nonnegative covariance [@harris1960; @esary1967]. Nothing in either argument depends on the shape of $G$, the distribution of true knowledge, or the amount of guessing (Appendix \ref{app:proofs}). Observed gain has no such guarantee: $\Delta x_i = G(X_{i1} + \Delta X_i) - G(X_{i1})$ rises and then falls in $X_{i1}$ when $G$ has a ceiling, while true gain rises throughout. And given $X_{i1}$, $\Delta x_i$ and $x_{i2}$ differ only by a constant, so they carry the same information: the trouble with observed gain is not the difference itself but the failure to hold initial knowledge constant [@lord1967; @allison1990].
+
+# How Large Are the Differences?
+
+The propositions say nothing about magnitudes. To gauge them, we simulate processes and ask how well each proxy tracks true gain. Each simulated process has 300 participants, like a Deliberative Poll. True initial knowledge is right-skewed (gamma), and item difficulties are drawn from a range of its quantiles, so that questionnaires run from very easy to moderately hard. People know items either by threshold or with logistic probability, and guess correctly with probability 0, .1 or .25. We vary the number of items (5 to 15), the average amount of learning and its dispersion, and three forms of learning: proportional to initial knowledge (L2), unrelated to it, and larger for those who know less.
+
+Rather than stipulate plausible parameter ranges, we let the data decide which processes are plausible. For each of `r nrow(features)` Deliberative Polls in the public release of @luskin2022, we compute five observable features: the mean and standard deviation of initial observed knowledge, the mean observed gain, the correlation of initial and post-process knowledge, and the correlation of observed gain with initial knowledge. A simulated process counts as plausible if each of its five features falls within the range of the real polls. Of `r count(sum(sims$learning_form == "proportional"))` processes with proportional learning, `r percent(share_plausible("proportional"))` are plausible; with learning unrelated to initial knowledge, `r percent(share_plausible("additive"))`; with catch-up learning, `r percent(share_plausible("catch_up"))`. The polls look like processes in which the knowledgeable learn more. In particular, the gain--initial-knowledge correlation, negative in every poll (`r coef_text(min(features$r_gain_x1), 2)` to `r coef_text(max(features$r_gain_x1), 2)`), is the signature of a ceiling that people learning in proportion to what they know run into.
+
+```{r simulations, fig.cap = "Correlation of each proxy with true knowledge gain across simulated processes whose observable features match a real Deliberative Poll. Points are medians and lines span the 5th to 95th percentiles across processes; they describe variation across plausible worlds, not sampling uncertainty. Post-process knowledge given initial is the partial correlation holding observed initial knowledge constant.", out.width = "100%"}
+figure("simulations")
+```
+
+Figure \ref{fig:simulations} shows the results. When the knowledgeable learn more, observed gain's median correlation with true gain is `r med(prop$observed_gain)`, negative in `r percent(mean(prop$observed_gain < 0))` of plausible processes; post-process knowledge's is `r med(prop$x2)`, never negative, and higher than observed gain's in `r percent(mean(prop$x2 > prop$observed_gain))` of them. Holding observed initial knowledge constant, post-process knowledge's partial correlation is `r med(prop$x2_given_x1)`, higher than observed gain's in `r percent(mean(prop$x2_given_x1 > prop$observed_gain))` of processes. When learning is unrelated to initial knowledge, the three proxies are similar (medians `r med(add$observed_gain)`, `r med(add$x2)` and `r med(add$x2_given_x1)`); only in the rare catch-up processes does observed gain do best.
+
+Could observed gain be rehabilitated? Asking more items helps only slightly. Among plausible processes with proportional learning, observed gain's median correlation is `r coef_text(by_items$gain[1], 2)` with `r by_items$items[1]` items and `r coef_text(by_items$gain[nrow(by_items)], 2)` with `r by_items$items[nrow(by_items)]`, while post-process knowledge's is `r coef_text(by_items$x2[1], 2)` and `r coef_text(by_items$x2[nrow(by_items)], 2)`. Asking harder items reduces the ceiling but can only be pushed so far: question writers do not know many of the hardest items, and legitimately shy away from asking the hardest they do know, lest nearly everyone score zero. Scoring by item response theory [@jackman2000; @levendusky2003] or weighting by difficulty [@sood2011] changes little, since such scores correlate above .96 with conventional ones [@luskin2006]. Branching, as in computerized adaptive testing, has more promise, but item pools are capped by question writers' expertise and respondents' patience [@montgomery2013], and no scoring can recover items no one knew to ask.
+
+# Does the Choice Matter?
+
+Consider a question the literature on deliberation asks often: who learns? In the same `r nrow(features)` polls, we regress each learning proxy on whether the participant has a bachelor's degree, poll by poll, and pool the estimates in a Bayesian random-effects meta-analysis [@rover2020]. With observed gain, the college-educated appear to learn no more than others (`r interval(gain_ba$estimate, gain_ba$lower, gain_ba$upper)`), and less in `r polls_gain_neg` of the polls. With post-process knowledge given initial knowledge, they learn more (`r interval(cond_ba$estimate, cond_ba$lower, cond_ba$upper)`), and less in `r polls_cond_neg` polls (Figure \ref{fig:who-learns}). Post-process knowledge alone, without initial knowledge, gives `r interval(x2_ba$estimate, x2_ba$lower, x2_ba$upper)`, mixing what people learned with what they already knew. As the model implies, observed gain with initial knowledge held constant gives exactly the same estimate as post-process knowledge with initial knowledge held constant.
+
+```{r who-learns, fig.cap = "Difference in learning for participants with a bachelor's degree, by poll, with 95\\% intervals. Left: observed gain. Right: post-process knowledge holding initial knowledge constant. Standard errors are clustered by small group; the pooled estimates are from Bayesian random-effects meta-analyses.", out.width = "100%"}
+figure("who_learns")
+```
+
+Learning is often also used to explain attitude change: in Deliberative Polls, the participants who learn the most have been expected to account for much of the net change in opinion. We test this on all `r att("gain", "indices")` attitude indices in the public data, regressing the change in each index on a learning proxy and the participant's distance from his or her small group's mean. No proxy of learning predicts moving in the direction of the sample's net change. The share of indices on which the coefficient is positive is `r percent(att("gain", "share_positive"))` for observed gain, `r percent(att("x2", "share_positive"))` for post-process knowledge and `r percent(att("x2_given_x1", "share_positive"))` for post-process knowledge given initial knowledge; the shares significantly positive and significantly negative are close to each other and to what chance alone would give (Appendix Table \ref{tab:attitudes}). Initial knowledge, which measures no learning at all, does as well as any of them.
+
+# Conclusion
+
+Together, the oversampling of easy items, easily neared or hit ceilings, and the tendency of the most knowledgeable to learn the most make observed knowledge gain a weak measure of true knowledge gain. A simple fix, not requiring any new data, is to use post-process knowledge---holding initial knowledge constant whenever the question is who learns, or what learning does. Under the one assumption the data support, the knowledgeable learning more, post-process knowledge is guaranteed to track learning; observed gain is not.
+
+# References {-}
+
+<div id="refs"></div>
+
+\appendix
+
+# Proofs {#app:proofs}
+
+*Result 1 and Condition 1a.* Since $\rho_{\Delta x \Delta X}$'s sign is that of $\sigma_{\Delta x \Delta X}$, $\rho_{\Delta x \Delta X} < 0$ exactly when $(\beta - 1)(b_2\beta - b_1)\sigma^2_{X_1} + b_2\sigma^2_v < 0$. The second addend is always positive; by (\ref{eq:rich}) and (\ref{eq:ceiling}), the first is always negative. So $\rho_{\Delta x \Delta X} < 0$ if and only if $-(\beta - 1)(b_2\beta - b_1)\sigma^2_{X_1}$ exceeds $b_2\sigma^2_v$, which is Condition 1a.
+
+*Result 2.* $\sigma_{x_2 \Delta X} = (\beta - 1) b_2 \beta \sigma^2_{X_1} + b_2 \sigma^2_v$, and both addends are positive by (\ref{eq:bias}) and (\ref{eq:rich}).
+
+*Result 3 and Conditions 3a--3d.* $\rho_{\Delta x \Delta X} < \rho_{x_2 \Delta X}$ if and only if $\sigma_{x_2 \Delta X}/\sigma_{x_2} > \sigma_{\Delta x \Delta X}/\sigma_{\Delta x}$. A jointly sufficient condition is that $\sigma_{x_2 \Delta X} > \sigma_{\Delta x \Delta X}$ and $\sigma^2_{x_2} < \sigma^2_{\Delta x}$. By (\ref{eq:c1}) and (\ref{eq:c2}), the first is equivalent, after subtracting $b_2\sigma^2_v$ and dividing by $(\beta - 1)\sigma^2_{X_1}$, to $b_2\beta > b_2\beta - b_1$, that is, $b_1 > 0$, which always holds. So $\sigma^2_{x_2} < \sigma^2_{\Delta x}$ alone is sufficient. By (\ref{eq:v1}) and (\ref{eq:v2}), it holds if and only if $b_2^2\beta^2\sigma^2_{X_1} < (b_2\beta - b_1)^2\sigma^2_{X_1} + \sigma^2_{u_1}$, that is, $(b_1 - 2b_2\beta)b_1\sigma^2_{X_1} + \sigma^2_{u_1} > 0$: Condition 3a. Condition 3b makes the first term nonnegative. Condition 3c follows from Results 1 and 2: if $\rho_{\Delta x \Delta X} < 0 < \rho_{x_2 \Delta X}$, the inequality holds. For 3d, since $\Delta x_i = x_{i2} - x_{i1}$, $\sigma^2_{x_2} < \sigma^2_{\Delta x}$ if and only if $0 < \sigma^2_{x_1} - 2\sigma_{x_1 x_2}$, that is, $\gamma_{21} < .5$.
+
+*Guessing.* With $k_i = \kappa r_i$, $\Delta y_i = (1 - k_i)\Delta x_i$ and $y_{i2} = (1 - k_i)x_{i2} + k_i$. Since $k_i$ is independent of $\Delta x_i$, $x_{i2}$ and $\Delta X_i$, $C((1 - k_i)\Delta x_i, \Delta X_i) = E(1 - k_i)\,C(\Delta x_i, \Delta X_i)$, and likewise for $y_{i2}$.
+
+*Propositions 1 and 2.* Condition on the item difficulties. Let $U_i$ collect the independent randomness in knowing items and in guessing at time 2. Then $x_{i2} = \phi(X_{i1} + h(X_{i1}, R_i), U_i)$ with $\phi$ nondecreasing in its first argument. Write $\bar\phi(X_{i1}, R_i) = E[x_{i2} \mid X_{i1}, R_i]$, nondecreasing in both arguments when $h$ is. Since $\Delta X_i$ does not depend on $U_i$, $\mathrm{Cov}(x_{i2}, \Delta X_i) = \mathrm{Cov}(\bar\phi(X_{i1}, R_i), h(X_{i1}, R_i))$. $X_{i1}$ and $R_i$ are independent, hence associated [@esary1967], and two nondecreasing functions of associated variables have nonnegative covariance. Given $X_{i1}$, $\bar\phi$ and $h$ are nondecreasing functions of $R_i$ alone, whose covariance is nonnegative [@harris1960]. Proposition 2 concerns true initial knowledge; holding observed initial knowledge constant, a coarse and noisy measure of it, the partial correlation was negative in `r sum(prop$x2_given_x1 < 0)` of the `r count(nrow(prop))` plausible simulated processes with proportional learning.
+
+# The polls and further results {#app:further}
+
+```{r features}
+features |>
+  dplyr::arrange(mean_x1) |>
+  dplyr::mutate(dplyr::across(-pollname, \(x) coef_text(x, 2)), pollname = gsub("&", "\\\\&", pollname)) |>
+  knitr::kable(
+    format = "latex", booktabs = TRUE, position = "H", linesep = "", align = "lrrrrrr",
+    col.names = c("Poll", "Mean $x_1$", "Mean gain", "SD $x_1$", "$r(x_1, x_2)$", "$r(\\Delta x, x_1)$", "$\\gamma_{21}$"),
+    escape = FALSE,
+    caption = "Observable features of the Deliberative Polls. The first five judge which simulated processes are plausible; $\\gamma_{21}$ is the slope of the regression of $x_2$ on $x_1$ (Condition 3d)."
+  )
+```
+
+```{r attitudes}
+labels <- c(gain = "Observed gain", x2 = "Post-process knowledge", x2_given_x1 = "Post-process knowledge given initial", x1 = "Initial knowledge")
+attitudes |>
+  dplyr::mutate(
+    proxy = labels[proxy],
+    dplyr::across(c(share_positive, share_significant_positive, share_significant_negative), \(x) coef_text(x, 2))
+  ) |>
+  dplyr::select(proxy, indices, share_positive, share_significant_positive, share_significant_negative) |>
+  knitr::kable(
+    format = "latex", booktabs = TRUE, position = "H", linesep = "", align = "lrrrr",
+    col.names = c("Proxy", "Indices", "Positive", "Significantly positive", "Significantly negative"),
+    caption = "Learning and attitude change. Each attitude index's change is regressed on the proxy and the distance from the small group's mean; the proxy's coefficient is signed so that positive means moving with the sample's net change. Significance at the 5\\% level with standard errors clustered by small group."
+  )
+```

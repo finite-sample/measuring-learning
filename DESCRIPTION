@@ -1,0 +1,34 @@
+Package: measuringlearning
+Type: Project
+Title: Measuring Learning in Informative Processes
+Version: 0.0.1
+Authors@R: c(
+    person("Robert C.", "Luskin", role = "aut"),
+    person("Ariel", "Helfer", role = "aut"),
+    person("Gaurav", "Sood", role = c("aut", "cre"), email = "gsood07@gmail.com"))
+Description: Theory, simulations and evidence on how well observed knowledge
+    gain and post-process knowledge measure true learning.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Imports:
+    assertr,
+    bayesmeta,
+    dplyr,
+    forcats,
+    ggplot2,
+    knitr,
+    lme4,
+    purrr,
+    readr,
+    rmarkdown,
+    rprojroot,
+    sandwich,
+    tibble,
+    tidyr,
+    withr
+Suggests:
+    lintr,
+    renv,
+    styler,
+    testthat
+Config/testthat/edition: 3
