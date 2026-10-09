@@ -2,32 +2,40 @@ project_file <- function(...) {
   file.path(rprojroot::find_root(rprojroot::has_file("DESCRIPTION")), ...)
 }
 
-source_manifest <- tibble::tribble(
-  ~source, ~path, ~doi, ~md5, ~license,
-  "distortions_responses", "data/raw/polardata.tab", "10.7910/DVN/D7G1LO",
-  "8e2b8aa45f9ebb71d73d88e2ecf3dbdb", "CC0 1.0",
-  "distortions_indices", "data/raw/poll_indices.tab", "10.7910/DVN/D7G1LO",
-  "cb262ca053f88d0119757a5c1039ba18", "CC0 1.0"
-)
+source_manifest <- readr::read_csv(project_file("data", "sources.csv"), show_col_types = FALSE)
 
-verify_sources <- function(manifest = source_manifest) {
-  observed <- unname(tools::md5sum(project_file(manifest$path)))
-  if (!identical(observed, manifest$md5)) {
-    stop("Checksum mismatch: ", paste(manifest$path[observed != manifest$md5], collapse = ", "))
+verify_sources <- function(manifest = source_manifest, root = project_file()) {
+  paths <- file.path(root, manifest$path)
+  if (any(!file.exists(paths))) {
+    stop("Missing source: ", paste(manifest$path[!file.exists(paths)], collapse = ", "))
+  }
+  observed <- vapply(paths, digest::digest, "", algo = "sha256", file = TRUE)
+  mismatch <- is.na(manifest$sha256) | unname(observed) != manifest$sha256
+  if (any(mismatch)) {
+    stop("Checksum mismatch: ", paste(manifest$path[mismatch], collapse = ", "))
   }
   invisible(TRUE)
 }
 
-# One row per participant. The public release duplicates 217 rows of one poll.
+# The maintained dp-data export has one row per participant.
 read_polardata <- function(path = project_file("data", "raw", "polardata.tab")) {
-  readr::read_tsv(path, show_col_types = FALSE) |>
-    dplyr::distinct(dplyr::across(-X), .keep_all = TRUE) |>
+  data <- readr::read_tsv(path, col_types = readr::cols(
+    .default = readr::col_double(), pollname = readr::col_character(), bettered = readr::col_logical()
+  ))
+  readr::stop_for_problems(data)
+  identified <- data[!is.na(data$caseid), c("pollid", "caseid")]
+  if (anyNA(data$pollid) || anyDuplicated(identified) || anyNA(data$X) || anyDuplicated(data$X)) {
+    stop("Invalid participant IDs (pollid, caseid) or export row IDs (X).")
+  }
+  data |>
+    dplyr::mutate(education_above_median = bettered) |>
     assertr::assert(assertr::within_bounds(0, 1 + 1e-9), t1know, t2know) |>
     assertr::verify(dplyr::n_distinct(dpnum) == 21)
 }
 
 read_indices <- function(path = project_file("data", "raw", "poll_indices.tab")) {
-  indices <- readr::read_tsv(path, show_col_types = FALSE)
-  stopifnot(nrow(indices) == 129)
+  indices <- readr::read_tsv(path, col_types = "dcdcccd")
+  readr::stop_for_problems(indices)
+  stopifnot(nrow(indices) == 129, !anyNA(indices), !anyDuplicated(indices[c("dpnum", "att_index")]))
   indices
 }

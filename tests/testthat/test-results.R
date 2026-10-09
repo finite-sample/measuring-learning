@@ -23,7 +23,7 @@ test_that("gain and post-process knowledge give the same effect once initial kno
 test_that("the empirical analyses cover every public poll and attitude index", {
   expect_equal(nrow(read_tab("poll_features.csv")), 21)
   expect_true(all(read_tab("poll_features.csv")$r_gain_x1 < 0))
-  expect_equal(unique(read_tab("attitudes_summary.csv")$indices), 128)
+  expect_equal(unique(read_tab("attitudes_summary.csv")$indices), 129)
   learners <- read_tab("who_learns.csv") |> dplyr::filter(pollname == "Pooled estimate")
   expect_equal(nrow(learners), 3)
 })

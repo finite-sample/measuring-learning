@@ -13,6 +13,7 @@ Encoding: UTF-8
 Imports:
     assertr,
     bayesmeta,
+    digest,
     dplyr,
     forcats,
     ggplot2,

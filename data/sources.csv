@@ -1,0 +1,3 @@
+source,repository,revision,upstream_path,path,sha256,schema_version
+participants,soodoku/dp-data,681d08ad72dfb50fa24eccfb837fd48f3db9a700,output/polardata/polardata.tab,data/raw/polardata.tab,3740efb3fe6ceb50718976edd92243ec1f56dac858acede164ea5f447d839f65,1
+indices,soodoku/dp-data,681d08ad72dfb50fa24eccfb837fd48f3db9a700,output/polardata/attitude-indices.tab,data/raw/poll_indices.tab,481029afdf2f76ba777d90dfb6e6c0770517b7a3250c2e2b21744f7461964c78,1

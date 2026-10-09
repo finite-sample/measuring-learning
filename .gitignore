@@ -8,6 +8,11 @@ renv/staging/
 ms/*.aux
 ms/*.log
 ms/*.out
+ms/*.bbl
+ms/*.blg
+ms/*.fdb_latexmk
+ms/*.fls
+ms/*.xdv
 ms/*.tex
 ms/*_files/
 data/cache/

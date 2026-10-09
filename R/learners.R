@@ -1,14 +1,14 @@
-# Does a bachelor's degree predict learning? The answer depends on the proxy:
+# Does education above the poll's participant median predict the learning proxy?
 # observed gain alone, or post-process knowledge controlling for initial
 # knowledge (equivalently, gain controlling for initial knowledge).
 who_learns <- function(polardata) {
   data <- polardata |>
-    dplyr::filter(!is.na(educ3), !is.na(t1know), !is.na(t2know)) |>
-    dplyr::mutate(ba = as.numeric(educ3 == 1), gain = t2know - t1know)
+    dplyr::filter(!is.na(education_above_median), !is.na(t1know), !is.na(t2know), !is.na(pollgroup)) |>
+    dplyr::mutate(high_education = as.numeric(education_above_median), gain = t2know - t1know)
   specs <- list(
-    "Observed gain" = gain ~ ba,
-    "Post-process knowledge" = t2know ~ ba,
-    "Post-process knowledge given initial" = t2know ~ ba + t1know
+    "Observed gain" = gain ~ high_education,
+    "Post-process knowledge" = t2know ~ high_education,
+    "Post-process knowledge given initial" = t2know ~ high_education + t1know
   )
   by_poll <- purrr::imap(specs, \(formula, label) {
     data |>
@@ -18,7 +18,10 @@ who_learns <- function(polardata) {
         vc <- sandwich::vcovCL(fit, cluster = poll$pollgroup, type = "HC1")
         tibble::tibble(
           pollname = poll$pollname[[1]], proxy = label,
-          estimate = stats::coef(fit)[["ba"]], std_error = sqrt(vc["ba", "ba"])
+          n = nrow(poll), groups = dplyr::n_distinct(poll$pollgroup),
+          n_above = sum(poll$high_education), n_at_or_below = sum(1 - poll$high_education),
+          estimate = stats::coef(fit)[["high_education"]],
+          std_error = sqrt(vc["high_education", "high_education"])
         )
       }) |>
       purrr::list_rbind()

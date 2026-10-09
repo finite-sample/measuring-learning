@@ -1,7 +1,10 @@
-.PHONY: restore analysis figures paper manuscript format lint test check ci-docker clean
+.PHONY: restore snapshot analysis figures paper manuscript format lint test check ci-docker clean
 
 restore:
 	Rscript -e 'renv::restore(prompt = FALSE)'
+
+snapshot:
+	Rscript scripts/snapshot_sources.R
 
 analysis:
 	Rscript scripts/run_all.R

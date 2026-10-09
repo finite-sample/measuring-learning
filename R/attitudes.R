@@ -13,7 +13,7 @@ index_regressions <- function(polardata, indices) {
         a1 = .data[[t1var]], a2 = .data[[t2_t3var]],
         x1 = t1know, x2 = t2know
       ) |>
-      dplyr::filter(!is.na(a1), !is.na(a2), !is.na(x1), !is.na(x2)) |>
+      dplyr::filter(!is.na(group), !is.na(a1), !is.na(a2), !is.na(x1), !is.na(x2)) |>
       dplyr::mutate(
         group_distance = a1 - (sum(a1) - a1) / (dplyr::n() - 1),
         .by = group

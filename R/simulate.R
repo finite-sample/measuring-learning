@@ -2,6 +2,12 @@
 # a = Inf makes this a threshold (knows the item iff X_t > d_j). Items not known
 # are answered correctly by lucky guess with probability c.
 answer_items <- function(x_true, difficulty, discrimination, guess) {
+  stopifnot(
+    is.numeric(x_true), length(x_true) > 0, all(is.finite(x_true)), all(x_true >= 0),
+    is.numeric(difficulty), length(difficulty) > 0, all(is.finite(difficulty)), all(difficulty > 0),
+    is.numeric(discrimination), length(discrimination) == 1L, !is.na(discrimination), discrimination > 0,
+    is.numeric(guess), length(guess) == 1L, is.finite(guess), guess >= 0, guess <= 1
+  )
   known <- if (is.infinite(discrimination)) {
     outer(x_true, difficulty, `>`) * 1
   } else {
@@ -38,17 +44,28 @@ simulate_process <- function(n = 1000, items = 10, easiest = 0.05, hardest = 0.6
 
 # Correlations of each proxy with true gain. Given x1, the observed gain and x2
 # carry the same information: their partial correlations with true gain are equal.
+cor_if_variable <- function(x, y) {
+  if (length(x) < 2 || any(!is.finite(x)) || any(!is.finite(y)) || stats::sd(x) == 0 || stats::sd(y) == 0) {
+    return(NA_real_)
+  }
+  stats::cor(x, y)
+}
+
 proxy_correlations <- function(sim) {
-  partial <- stats::cor(stats::resid(stats::lm(x2 ~ x1, sim)), stats::resid(stats::lm(true_gain ~ x1, sim)))
+  partial <- if (stats::sd(sim$x2) == 0 || stats::sd(sim$true_gain) == 0) {
+    NA_real_
+  } else {
+    cor_if_variable(stats::resid(stats::lm(x2 ~ x1, sim)), stats::resid(stats::lm(true_gain ~ x1, sim)))
+  }
   tibble::tibble(
-    observed_gain = stats::cor(sim$observed_gain, sim$true_gain),
-    x2 = stats::cor(sim$x2, sim$true_gain),
+    observed_gain = cor_if_variable(sim$observed_gain, sim$true_gain),
+    x2 = cor_if_variable(sim$x2, sim$true_gain),
     x2_given_x1 = partial,
     mean_x1 = mean(sim$x1),
     mean_gain = mean(sim$observed_gain),
     sd_x1 = stats::sd(sim$x1),
-    r_x1_x2 = stats::cor(sim$x1, sim$x2),
-    r_gain_x1 = stats::cor(sim$observed_gain, sim$x1)
+    r_x1_x2 = cor_if_variable(sim$x1, sim$x2),
+    r_gain_x1 = cor_if_variable(sim$observed_gain, sim$x1)
   )
 }
 
@@ -56,19 +73,20 @@ proxy_correlations <- function(sim) {
 # if what it would show a researcher lies within the range of real polls.
 poll_features <- function(polardata) {
   polardata |>
+    dplyr::filter(!is.na(t1know), !is.na(t2know)) |>
     dplyr::summarise(
-      mean_x1 = mean(t1know, na.rm = TRUE),
-      mean_gain = mean(t2know - t1know, na.rm = TRUE),
-      sd_x1 = stats::sd(t1know, na.rm = TRUE),
-      r_x1_x2 = stats::cor(t1know, t2know, use = "complete.obs"),
-      r_gain_x1 = stats::cor(t2know - t1know, t1know, use = "complete.obs"),
-      slope_x2_x1 = stats::cov(t1know, t2know, use = "complete.obs") / stats::var(t1know, na.rm = TRUE),
+      mean_x1 = mean(t1know),
+      mean_gain = mean(t2know - t1know),
+      sd_x1 = stats::sd(t1know),
+      r_x1_x2 = stats::cor(t1know, t2know),
+      r_gain_x1 = stats::cor(t2know - t1know, t1know),
+      slope_x2_x1 = stats::cov(t1know, t2know) / stats::var(t1know),
       .by = pollname
     )
 }
 
 looks_like_a_poll <- function(sims, features) {
-  inside <- \(x, name) x >= min(features[[name]]) & x <= max(features[[name]])
+  inside <- \(x, name) is.finite(x) & x >= min(features[[name]]) & x <= max(features[[name]])
   inside(sims$mean_x1, "mean_x1") & inside(sims$mean_gain, "mean_gain") & inside(sims$sd_x1, "sd_x1") &
     inside(sims$r_x1_x2, "r_x1_x2") & inside(sims$r_gain_x1, "r_gain_x1")
 }

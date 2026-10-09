@@ -37,7 +37,7 @@ p <- ggplot2::ggplot(worlds, ggplot2::aes(estimate, proxy)) +
   ggplot2::theme(strip.text.y = ggplot2::element_text(angle = 0, hjust = 0))
 save_evidence(p, "figs/simulations", width = 6.5, height = 4.2)
 
-# Figure 2. Effect of a bachelor's degree on learning, by poll and proxy.
+# Figure 2. Above-median education and learning proxies, by poll.
 learners <- read_tab("who_learns.csv") |>
   dplyr::filter(proxy != "Post-process knowledge") |>
   dplyr::mutate(
@@ -54,6 +54,6 @@ p <- ggplot2::ggplot(learners, ggplot2::aes(estimate, row)) +
   geom_estimate() +
   ggplot2::facet_grid(. ~ proxy) +
   ggplot2::scale_x_continuous(breaks = c(-0.2, 0, 0.2, 0.4)) +
-  ggplot2::labs(x = "Bachelor's degree effect (95% CI)", y = NULL) +
+  ggplot2::labs(x = "Above-median education difference (95% intervals)", y = NULL) +
   theme_evidence()
 save_evidence(p, "figs/who_learns", width = 6.5, height = 5.5)
