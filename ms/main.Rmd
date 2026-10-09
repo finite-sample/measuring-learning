@@ -44,10 +44,25 @@ polls_gain_neg <- sum(learners$estimate[learners$proxy == "Observed gain" & lear
 polls_cond_neg <- sum(learners$estimate[learners$proxy == "Post-process knowledge given initial" & learners$pollname != "Pooled estimate"] < 0)
 att <- \(p, col) attitudes[[col]][attitudes$proxy == p]
 by_items <- dplyr::summarise(prop, gain = stats::median(observed_gain), x2 = stats::median(x2), .by = items) |> dplyr::arrange(items)
+comparison <- read_tab("estimator_comparison.csv")
+fit_runs <- dplyr::distinct(comparison, scenario, replicate, fit_status)
+comparison_all <- dplyr::filter(comparison, subset == "all", fit_status == "ok")
+comparison_summary <- comparison_all |>
+  dplyr::summarise(dplyr::across(c(correlation, rank_correlation, rmse, bias, coverage), \(x) if (all(is.na(x))) NA_real_ else stats::median(x, na.rm = TRUE)), .by = c(scenario, estimator))
+paired_errors <- comparison_all |>
+  dplyr::filter(estimator %in% c("joint_irt", "post_only_irt")) |>
+  dplyr::select(scenario, replicate, estimator, rmse) |>
+  tidyr::pivot_wider(names_from = estimator, values_from = rmse)
+easy_10_pairs <- dplyr::filter(paired_errors, scenario == "easy_10")
+scenario_labels <- c(easy_5 = "Easy, 5 items", easy_10 = "Easy, 10 items", easy_15 = "Easy, 15 items", broad_10 = "Broader difficulties", additive = "Additive learning", catch_up = "Catch-up learning", varying_guess = "Item-specific guessing", item_drift = "Easier follow-up items")
+comparison_value <- \(scenario_name, method, metric) comparison_summary[[metric]][comparison_summary$scenario == scenario_name & comparison_summary$estimator == method]
+fit_counts <- fit_runs |>
+  dplyr::summarise(fits = sum(fit_status == "ok"), attempts = dplyr::n(), .by = scenario)
+
 ```
 
 \begin{abstract}
-We often want to know how much people learn from informative processes like election campaigns and deliberative forums, and who learns the most. The obvious measure, the gain in the share of knowledge items answered correctly, is a poor indicator of true learning. We show, in a linear model, a nonlinear one and a general one, that when those who know more learn more, as the literature on prior knowledge suggests, post-process knowledge has nonnegative covariance with true learning under the general model, overall and conditional on true initial knowledge. Observed gain has no such unconditional guarantee and can be negatively correlated with learning. Conditioning on noisy observed initial knowledge does not inherit the guarantee. In `r count(nrow(prop))` simulated processes whose observable features match `r nrow(features)` Deliberative Polls, observed gain's median correlation with true learning is `r med(prop$observed_gain)` and post-process knowledge's is `r med(prop$x2)`. The choice matters: in the same polls, the above-median education difference in observed gain is uncertain (`r interval(gain_education$estimate, gain_education$lower, gain_education$upper)`), while their post-process knowledge is higher conditional on initial knowledge (`r interval(cond_education$estimate, cond_education$lower, cond_education$upper)`).
+We often want to know how much people learn from informative processes like election campaigns and deliberative forums, and who learns the most. The obvious measure, the gain in the share of knowledge items answered correctly, can be a poor indicator of true learning. We show, in a linear model, a nonlinear one and a general one, that when learning is nondecreasing in initial knowledge and an independent learning shock, post-process knowledge has nonnegative covariance with true learning, overall and conditional on true initial knowledge. Observed gain has no such unconditional guarantee and can be negatively correlated with learning. Conditioning on noisy observed initial knowledge does not inherit the guarantee. In `r count(nrow(prop))` simulated processes whose observable features match `r nrow(features)` Deliberative Polls, observed gain's median correlation with true learning is `r med(prop$observed_gain)` and post-process knowledge's is `r med(prop$x2)`. The choice matters: in the same polls, the above-median education difference in observed gain is uncertain (`r interval(gain_education$estimate, gain_education$lower, gain_education$upper)`), while their post-process knowledge is higher conditional on initial knowledge (`r interval(cond_education$estimate, cond_education$lower, cond_education$upper)`). These comparisons do not identify the amount learned. We implement the conditional mean of true gain given both waves in a joint item-response model and compare it with simpler estimators on independent simulated respondents. It improves recovery under proportional learning with sufficiently informative items, but misspecified learning and changing item difficulty can reverse its advantage.
 \end{abstract}
 
 # Introduction
@@ -66,7 +81,7 @@ The set of knowable, relevant items includes everything that is relevant and kno
 
 These facts suggest the following properties of knowledge and learning:
 
-- L1. The participants learn: $E(X_{i2}|X_{i1}) > X_{i1}$ for $X_{i1} > 0$.
+- L1. The participants learn on average: $E(X_{i2}|X_{i1}) > X_{i1}$ for $X_{i1} > 0$.
 - L2. The more knowledgeable learn more: $E(\Delta X_i | X_{i1})$ increases with $X_{i1}$. More new information sticks when there is more previously cognized information for it to stick to [@recht1988; @eckhardt1991; @cooke1993; @hambrick2003].
 - L3. Those who know nothing learn nothing.
 - M1. Those who know nothing show no knowledge, and those who know the most show as much as the measure permits.
@@ -97,7 +112,7 @@ implying
 \Delta x_i &= (a_2 - a_1) + b_2\alpha + (b_2\beta - b_1) X_{i1} + (u_{i2} - u_{i1}) + b_2 v_i, \label{eq:dx}\\
 \Delta X_i &= \alpha + (\beta - 1) X_{i1} + v_i. \label{eq:dX}
 \end{align}
-The measurement errors $u_{i1}$ and $u_{i2}$ and the disturbance $v_i$ have zero means, are mutually uncorrelated, and are uncorrelated with $X_{i1}$. The measurement errors are also uncorrelated with $X_{i2}$, and $\sigma^2_{X_1}$, $\sigma^2_{u_1}$, $\sigma^2_{u_2}$ and $\sigma^2_v$ are all strictly positive: there is some measurement error at each wave, true initial knowledge does not perfectly predict true later knowledge, and true initial knowledge varies.
+For the conditional-mean interpretations, assume $E(v_i\mid X_{i1})=0$ and $E(u_{it}\mid X_{i1},v_i)=0$, with $u_{i1}$ and $u_{i2}$ uncorrelated. These assumptions imply the zero covariances used below; zero covariances alone would suffice for the covariance calculations. The variances $\sigma^2_{X_1}$, $\sigma^2_{u_1}$, $\sigma^2_{u_2}$ and $\sigma^2_v$ are all strictly positive: there is some measurement error at each wave, true initial knowledge does not perfectly predict true later knowledge, and true initial knowledge varies. The linear equations are local approximations, not a globally bounded response model.
 
 A second layer of assumptions expresses the three phenomena. *Item-sampling bias.* Those who know nothing, and do not guess, score 0, so $a_t = 0$ and $b_t = E(x_{it}|X_{it} = X_{Mt})/X_{Mt}$, where $X_{Mt}$ is the highest true knowledge in the population. Since the questionnaire lets $E(x_{it}|X_{it} = X_{Mt})$ approach 1 while $X_{Mt}$ is near 0,
 \begin{equation}
@@ -145,12 +160,12 @@ The knowledge proportions $x_{i1}$ and $x_{i2}$ are bounded by 0 and 1 and often
 X_{i2} &= \beta X_{i1}, \label{eq:q1}\\
 x_{it} &= b X_{it} + c X_{it}^2 + u_{it}, \quad t = 1, 2, \label{eq:q2}
 \end{align}
-with $\beta > 1$, $b > 0$ and $c < 0$, so that
+with $\beta > 1$, $b > 0$ and $c < 0$. Assume $E(u_{it}\mid X_{i1})=0$ and uncorrelated errors across waves, so that the errors are also uncorrelated with $X_{i1}^2$. Then
 \begin{align}
 \Delta X_i &= (\beta - 1) X_{i1}, \\
 \Delta x_i &= (\beta - 1) b X_{i1} + (\beta^2 - 1) c X_{i1}^2 + u_{i2} - u_{i1}.
 \end{align}
-M2 requires observed knowledge to rise with true knowledge over the range of true knowledge at both waves: $b + 2cX_{it} > 0$, or $X_{M2} = \beta X_{M1} \le -b/2c$. $E(\Delta x_i|X_{i1})$, by contrast, peaks at $X_{i1} = -b/2(\beta+1)c$, below $X_{M1}$ only if the support extends beyond that point. M4 therefore requires $X_{M1} > -b/[2(\beta+1)c]$ as well as $\beta > 1$. Writing $V$ and $C$ for variances and covariances,
+M2 requires observed knowledge to rise with true knowledge over the range of true knowledge at both waves: $b + 2cX_{it} > 0$, or $X_{M2} = \beta X_{M1} < -b/(2c)$; equality permits a zero derivative at the endpoint. $E(\Delta x_i|X_{i1})$, by contrast, peaks at $X_{i1} = -b/[2(\beta+1)c]$, below $X_{M1}$ only if the support extends beyond that point. M4 therefore requires $X_{M1} > -b/[2(\beta+1)c]$ as well as $\beta > 1$. Writing $V$ and $C$ for variances and covariances,
 \begin{align}
 C(\Delta x_i, \Delta X_i) &= (\beta - 1)^2 [b V(X_{i1}) + (\beta + 1) c\, C(X_{i1}^2, X_{i1})], \label{eq:qc1}\\
 C(x_{i2}, \Delta X_i) &= (\beta - 1)\beta [b V(X_{i1}) + c \beta\, C(X_{i1}^2, X_{i1})], \label{eq:qc2}\\
@@ -161,14 +176,14 @@ V(x_{i2}) &= b^2 \beta^2 V(X_{i1}) + c^2 \beta^4 V(X_{i1}^2) + 2 b c \beta^3 C(X
 \end{align}
 Since $X_{i1} \ge 0$, $C(X_{i1}^2, X_{i1}) > 0$, and with $c < 0$ the second term in each bracket is negative. Let $\gamma = C(X_{i1}^2, X_{i1})/V(X_{i1})$, the slope of the population regression of $X_{i1}^2$ on $X_{i1}$. Then:
 
-- R1. $\rho_{\Delta x \Delta X} > 0$ if and only if $\gamma < -b/(\beta + 1)c$.
-- R2. $\rho_{x_2 \Delta X} > 0$ if and only if $\gamma < -b/\beta c$.
-- R3. Since $-b/(\beta + 1)c < -b/\beta c$, $\rho_{\Delta x \Delta X} > 0$ implies $\rho_{x_2 \Delta X} > 0$, but not the reverse.
+- R1. $\rho_{\Delta x \Delta X} > 0$ if and only if $\gamma < -b/[(\beta + 1)c]$.
+- R2. $\rho_{x_2 \Delta X} > 0$ if and only if $\gamma < -b/(\beta c)$.
+- R3. Since $-b/[(\beta + 1)c] < -b/(\beta c)$, $\rho_{\Delta x \Delta X} > 0$ implies $\rho_{x_2 \Delta X} > 0$, but not the reverse.
 - R4. Under M2, R2's condition always holds: $\rho_{x_2 \Delta X} > 0$. The bracket in (\ref{eq:qc2}) is the covariance of $X_{i1}$ with $bX_{i1} + c\beta X_{i1}^2$, a function that rises over the whole range of $X_{i1}$ when $\beta X_{M1} \le -b/2c$; the covariance of a variable with an increasing function of itself is positive. The bracket in (\ref{eq:qc1}) is the covariance of $X_{i1}$ with $bX_{i1} + (\beta + 1)cX_{i1}^2$, which rises and then falls, and can be negative.
 
 # How General Are These Results?
 
-Both models are special cases of a general one. Let each questionnaire item $j$ have a difficulty $d_j$ on the scale of true knowledge, and let a person know the item with probability $F(X_{it}, d_j)$, nondecreasing in $X_{it}$. In the simplest case $F$ is a threshold---the person knows the item if and only if $X_{it} > d_j$---and observed knowledge is $x_{it} = G(X_{it})$, where $G$ is the distribution function of the questionnaire's difficulties. An easy questionnaire concentrates its difficulties low, so $G$ rises quickly and flattens at 1. Evenly spread difficulties give a piecewise linear $G$; a smooth, concentrated distribution gives something close to the quadratic; a logistic $F$ gives an item response model. Let people who do not know an item answer it correctly by lucky guess, and let true learning be $\Delta X_i = h(X_{i1}, R_i)$, where $R_i$ is a scalar learning shock independent of $X_{i1}$, and $h$ is nondecreasing in $R_i$.
+A monotone item-response model extends the argument beyond the linear and quadratic approximations. Let each questionnaire item $j$ have a difficulty $d_j$ on the scale of true knowledge, and let a person know the item with probability $F(X_{it}, d_j)$, nondecreasing in $X_{it}$. In the simplest case $F$ is a threshold---the person knows the item if and only if $X_{it} > d_j$---and observed knowledge is $x_{it} = G(X_{it})$, where $G$ is the distribution function of the questionnaire's difficulties. An easy questionnaire concentrates its difficulties low, so $G$ rises quickly and flattens at 1. Evenly spread difficulties give a piecewise linear $G$; a smooth, concentrated distribution gives something close to the quadratic; a logistic $F$ gives an item response model. Let people who do not know an item answer it correctly by lucky guess. Item-response and guessing randomness are independent of initial knowledge and the learning shock, and guessing probabilities do not vary with either. Let true learning be $\Delta X_i = h(X_{i1}, R_i)$, where $R_i$ is a scalar learning shock independent of $X_{i1}$, and $h$ is nondecreasing in $R_i$.
 
 \begin{proposition}
 If $h$ is nondecreasing in $X_{i1}$ (the rich get richer), $\mathrm{Cov}(x_{i2}, \Delta X_i) \ge 0$.
@@ -178,55 +193,273 @@ If $h$ is nondecreasing in $X_{i1}$ (the rich get richer), $\mathrm{Cov}(x_{i2},
 For any $h$, $\mathrm{Cov}(x_{i2}, \Delta X_i \mid X_{i1}) \ge 0$.
 \end{proposition}
 
-Both follow from the association of independent random variables: any two nondecreasing functions of independent variables have nonnegative covariance [@harris1960; @esary1967]. Nothing in either argument depends on the shape of $G$, the distribution of true knowledge, or the amount of guessing (Appendix \ref{app:proofs}). Observed gain has no such guarantee: $\Delta x_i = G(X_{i1} + \Delta X_i) - G(X_{i1})$ rises and then falls in $X_{i1}$ when $G$ has a ceiling, while true gain rises throughout. With deterministic measurement, conditioning on $X_{i1}$ fixes $x_{i1}$, so $\Delta x_i$ and $x_{i2}$ differ only by a constant. Conditioning on the realized observed baseline also makes gain and post-process scores equivalent, but does not condition on true initial knowledge. The two distinctions matter when baseline knowledge is measured with error [@lord1967; @allison1990].
+Proposition 1 strengthens L2: learning must be nondecreasing in initial knowledge at each value of the independent shock, not merely on average. Both propositions follow from the association of independent random variables: any two nondecreasing functions of independent variables have nonnegative covariance [@harris1960; @esary1967]. With finite second moments, neither argument requires a particular shape of $G$ or distribution of true knowledge. Item-specific guessing probabilities are allowed under the stated independence assumptions (Appendix \ref{app:proofs}). Observed gain has no such unconditional guarantee. Under deterministic measurement, $\Delta x_i = G(X_{i1} + \Delta X_i) - G(X_{i1})$ can rise and then fall in $X_{i1}$ while true gain rises throughout. A ceiling alone does not require this shape over every possible support. With deterministic measurement, conditioning on $X_{i1}$ fixes $x_{i1}$, so $\Delta x_i$ and $x_{i2}$ differ only by a constant. Conditioning on the realized observed baseline also makes gain and post-process scores equivalent, but does not condition on true initial knowledge. The two distinctions matter when baseline knowledge is measured with error [@lord1967; @allison1990].
 
 # How Large Are the Differences?
 
 The propositions say nothing about magnitudes. To gauge them, we simulate processes and ask how well each proxy tracks true gain. Each simulated process has 300 participants, like a Deliberative Poll. The simulated true-knowledge variable is a right-skewed gamma trait, rather than a literal proportion of all knowable items, and item difficulties are drawn from a range of its quantiles, so that questionnaires run from very easy to moderately hard. People know items either by threshold or with logistic probability, and guess correctly with probability 0, .1 or .25. We vary the number of items (5 to 15), the median learning-rate multiplier and its log-scale dispersion, and three forms of learning: proportional to initial knowledge (L2), unrelated to it, and larger for those who know less.
 
-Within the specified parameter ranges, we retain processes whose observable summaries resemble the polls. For each of `r nrow(features)` Deliberative Polls in the corrected, source-based dp-data export of the polls in @luskin2022, we compute five observable features: the mean and standard deviation of initial observed knowledge, the mean observed gain, the correlation of initial and post-process knowledge, and the correlation of observed gain with initial knowledge. All five empirical features use participants with knowledge scores at both waves. A simulated process passes the filter if each feature falls within the corresponding range across polls; it need not resemble any single poll jointly. Inputs are frozen at dp-data commit `681d08ad72dfb50fa24eccfb837fd48f3db9a700`, with SHA-256 checksums in the repository manifest. Of `r count(sum(sims$learning_form == "proportional"))` processes with proportional learning, `r percent(share_plausible("proportional"))` are plausible; with learning unrelated to initial knowledge, `r percent(share_plausible("additive"))`; with catch-up learning, `r nrow(catch)` of `r count(sum(sims$learning_form == "catch_up"))` processes. Proportional learning passes more often in this grid, but these rates are conditional on the chosen model family and parameter distribution. They do not establish which learning process generated the polls. The gain--initial-knowledge correlation is negative in every poll (`r coef_text(min(features$r_gain_x1), 2)` to `r coef_text(max(features$r_gain_x1), 2)`). Ceilings can produce this pattern, but so can baseline measurement error, because the baseline score is subtracted in observed gain.
+Within the specified parameter ranges, we retain processes whose observable summaries resemble the polls. For each of `r nrow(features)` Deliberative Polls reported in @luskin2022, we compute five observable features: the mean and standard deviation of initial observed knowledge, the mean observed gain, the correlation of initial and post-process knowledge, and the correlation of observed gain with initial knowledge. All five empirical features use participants with knowledge scores at both waves. A simulated process passes the filter if each feature falls within the corresponding range across polls; it need not resemble any single poll jointly. Of `r count(sum(sims$learning_form == "proportional"))` processes with proportional learning, `r percent(share_plausible("proportional"))` are plausible; with learning unrelated to initial knowledge, `r percent(share_plausible("additive"))`; with catch-up learning, `r nrow(catch)` of `r count(sum(sims$learning_form == "catch_up"))` processes. Proportional learning passes more often in this grid, but these rates are conditional on the chosen model family and parameter distribution. They do not establish which learning process generated the polls. The gain--initial-knowledge correlation is negative in every poll (`r coef_text(min(features$r_gain_x1), 2)` to `r coef_text(max(features$r_gain_x1), 2)`). Ceilings can produce this pattern, but so can baseline measurement error, because the baseline score is subtracted in observed gain.
 
-```{r simulations, fig.cap = "Correlation of each proxy with true knowledge gain across simulated processes whose observable features fall within the marginal ranges across Deliberative Polls. Points are medians and lines span the 5th to 95th percentiles across processes; they describe variation across plausible worlds, not sampling uncertainty. Post-process knowledge given initial is the partial correlation holding observed initial knowledge constant.", out.width = "100%"}
+```{r simulations, fig.cap = "Correlation of each proxy with true knowledge gain across simulated processes whose observable features fall within the marginal ranges across Deliberative Polls. Points are medians and lines span the 5th to 95th percentiles across processes; they describe variation across plausible worlds, not sampling uncertainty. The baseline-residualized score is the residual from regressing post-process on initial knowledge. Every score is correlated with the same, unresidualized true gain.", out.width = "100%"}
 figure("simulations")
 ```
 
-Figure \ref{fig:simulations} shows the results. When the knowledgeable learn more, observed gain's median correlation with true gain is `r med(prop$observed_gain)`, negative in `r percent(mean(prop$observed_gain < 0))` of plausible processes; post-process knowledge's is `r med(prop$x2)`, never negative, and higher than observed gain's in `r percent(mean(prop$x2 > prop$observed_gain))` of them. Holding observed initial knowledge constant, post-process knowledge's partial correlation is `r med(prop$x2_given_x1)`, higher than observed gain's in `r percent(mean(prop$x2_given_x1 > prop$observed_gain))` of processes. When learning is unrelated to initial knowledge, the three proxies are similar (medians `r med(add$observed_gain)`, `r med(add$x2)` and `r med(add$x2_given_x1)`); observed gain performs best in the `r nrow(catch)` retained catch-up processes. This small selected subset does not characterize catch-up learning generally.
+Figure \ref{fig:simulations} shows the results. When the knowledgeable learn more, observed gain's median correlation with true gain is `r med(prop$observed_gain)`, negative in `r percent(mean(prop$observed_gain < 0))` of plausible processes; post-process knowledge's is `r med(prop$x2)`, never negative, and higher than observed gain's in `r percent(mean(prop$x2 > prop$observed_gain))` of them. The baseline-residualized post score has median correlation `r med(prop$x2_residualized)` with true gain. The corresponding partial correlation is `r med(prop$x2_given_x1)`, but answers a different question: it also removes the variation in true gain associated with observed baseline knowledge. When learning is unrelated to initial knowledge, the three scores have median correlations `r med(add$observed_gain)`, `r med(add$x2)` and `r med(add$x2_residualized)`; observed gain performs best in the `r nrow(catch)` retained catch-up processes. This small selected subset does not characterize catch-up learning generally.
 
-Could observed gain be rehabilitated? Asking more items helps only slightly. Among plausible processes with proportional learning, observed gain's median correlation is `r coef_text(by_items$gain[1], 2)` with `r by_items$items[1]` items and `r coef_text(by_items$gain[nrow(by_items)], 2)` with `r by_items$items[nrow(by_items)]`, while post-process knowledge's is `r coef_text(by_items$x2[1], 2)` and `r coef_text(by_items$x2[nrow(by_items)], 2)`. Asking harder items reduces the ceiling but can only be pushed so far: question writers do not know many of the hardest items, and legitimately shy away from asking the hardest they do know, lest nearly everyone score zero. Scoring by item response theory [@jackman2000; @levendusky2003] or weighting by difficulty [@sood2011] changes little, since such scores correlate above .96 with conventional ones [@luskin2006]. Branching, as in computerized adaptive testing, has more promise, but item pools are capped by question writers' expertise and respondents' patience [@montgomery2013], and no scoring can recover items no one knew to ask.
+Asking more items helps observed gain only slightly within this simulation grid. Among retained processes with proportional learning, its median correlation is `r coef_text(by_items$gain[1], 2)` with `r by_items$items[1]` items and `r coef_text(by_items$gain[nrow(by_items)], 2)` with `r by_items$items[nrow(by_items)]`, while post-process knowledge's is `r coef_text(by_items$x2[1], 2)` and `r coef_text(by_items$x2[nrow(by_items)], 2)`. These are comparisons across separately selected processes, not an experiment holding the process and item difficulty distribution fixed. They do not establish that a longer or better targeted test cannot measure learning well.
 
 # Does the Choice Matter?
 
-Consider a question the literature on deliberation asks often: who learns? In the same `r nrow(features)` polls, we regress each learning proxy on whether education is strictly above the poll's participant median, poll by poll, and pool the estimates in a Bayesian random-effects meta-analysis [@rover2020]. With observed gain, the above-median education difference is uncertain (`r interval(gain_education$estimate, gain_education$lower, gain_education$upper)`), with a negative estimate in `r polls_gain_neg` of the polls. With post-process knowledge given initial knowledge, the above-median group scores higher (`r interval(cond_education$estimate, cond_education$lower, cond_education$upper)`), with a negative estimate in `r polls_cond_neg` polls (Figure \ref{fig:who-learns}). Post-process knowledge alone, without initial knowledge, gives `r interval(x2_education$estimate, x2_education$lower, x2_education$upper)`, mixing what people learned with what they already knew. As the model implies, observed gain with initial knowledge held constant gives exactly the same estimate as post-process knowledge with initial knowledge held constant.
+Consider a question the literature on deliberation asks often: who learns? In the same `r nrow(features)` polls, we regress each learning proxy on whether education is strictly above the poll's participant median, poll by poll, and pool the estimates in a Bayesian random-effects meta-analysis [@rover2020]. With observed gain, the above-median education difference is uncertain (`r interval(gain_education$estimate, gain_education$lower, gain_education$upper)`), with a negative estimate in `r polls_gain_neg` of the polls. With post-process knowledge given initial knowledge, the above-median group scores higher (`r interval(cond_education$estimate, cond_education$lower, cond_education$upper)`), with a negative estimate in `r polls_cond_neg` of `r nrow(features)` polls (Figure \ref{fig:who-learns}). Post-process knowledge alone, without initial knowledge, gives `r interval(x2_education$estimate, x2_education$lower, x2_education$upper)`, mixing what people learned with what they already knew. As the model implies, observed gain with initial knowledge held constant gives exactly the same estimate as post-process knowledge with initial knowledge held constant.
 
-The education indicator comes from dp-data's reviewed poll-specific ordered measures. Its fixed reference population is the unique historical-polardata participant sample with observed education, before exclusions for outcomes or group IDs; ties at the median remain in the lower group. We use the exported indicator without recomputing cutoffs. Education, paired knowledge and discussion-group membership must be observed for a participant to enter the regressions. The comparisons are associations with observed scores, not causal effects of education or direct measurements of true learning. Poll estimates use HC1 standard errors clustered by discussion group and normal 95\% intervals. The meta-analysis uses a half-normal prior with scale .1 on between-poll heterogeneity and an improper uniform prior on the pooled mean; its intervals are 95\% posterior credible intervals.
-
-```{r who-learns, fig.cap = "Difference in learning proxies for participants above versus at or below their poll's education median, by poll, with 95\\% intervals. Left: observed gain. Right: post-process knowledge holding initial knowledge constant. Standard errors are clustered by small group; the pooled estimates are from Bayesian random-effects meta-analyses.", out.width = "100%"}
+```{r who-learns, fig.cap = "Difference in learning proxies for participants above versus at or below their poll's education median, by poll, with 95\\% intervals. Left: observed gain. Right: post-process knowledge holding initial knowledge constant. Standard errors are clustered by small group; the pooled estimates are from Bayesian random-effects meta-analyses.", out.width = "90%"}
 figure("who_learns")
 ```
 
+The education indicator comes from dp-data's reviewed poll-specific ordered measures. Its fixed reference population is the unique historical-polardata participant sample with observed education, before exclusions for outcomes or group IDs; ties at the median remain in the lower group. We use the exported indicator without recomputing cutoffs. Education, paired knowledge and discussion-group membership must be observed for a participant to enter the regressions. The comparisons are associations with observed scores, not causal effects of education or direct measurements of true learning. Poll estimates use HC1 standard errors clustered by discussion group and normal 95\% intervals. The meta-analysis uses a half-normal prior with scale .1 on between-poll heterogeneity and an improper uniform prior on the pooled mean; its intervals are 95\% posterior credible intervals.
+
 Learning is often also used to explain attitude change: in Deliberative Polls, the participants who learn the most have been expected to account for much of the net change in opinion. We estimate these associations on all `r att("gain", "indices")` attitude indices in the corrected data, regressing the change in each index on a learning proxy and the participant's distance from the other complete-case members of the small group at baseline. Records with missing scores or group IDs and groups with fewer than two complete cases are excluded. The net direction and proxy standard deviation are computed within that same analysis sample. The share of indices on which the coefficient is positive is `r percent(att("gain", "share_positive"))` for observed gain, `r percent(att("x2", "share_positive"))` for post-process knowledge and `r percent(att("x2_given_x1", "share_positive"))` for post-process knowledge given initial knowledge; the shares significantly positive are `r percent(att("gain", "share_significant_positive"))`, `r percent(att("x2", "share_significant_positive"))` and `r percent(att("x2_given_x1", "share_significant_positive"))`, respectively (Appendix Table \ref{tab:attitudes}). These summaries show proxy-specific associations; they do not establish that learning has no relationship with attitude change. Initial knowledge also has positive associations. The tests are unadjusted for multiple comparisons, indices within a poll are dependent, and the direction is estimated from the same sample. The significance shares therefore are descriptive rather than a calibrated test against chance.
+
+# Estimating How Much People Learn
+
+For estimating an individual's true gain under squared-error loss, the target estimator is the conditional mean given all responses at both waves:
+\begin{equation}
+\widehat{\Delta X}_i
+=E\!\left[\Delta X_i\mid\mathbf Y_{i1},\mathbf Y_{i2}\right].\label{eq:conditional-gain}
+\end{equation}
+Let $\mathcal Y_i=(\mathbf Y_{i1},\mathbf Y_{i2})$ and $m_i=E(\Delta X_i\mid\mathcal Y_i)$. For any estimate $a_i$ computed from those responses, assuming finite second moments,
+\[
+E\!\left[(\Delta X_i-a_i)^2\mid\mathcal Y_i\right]
+=\operatorname{Var}(\Delta X_i\mid\mathcal Y_i)+(m_i-a_i)^2.
+\]
+The second term is minimized by $a_i=m_i$. This identifies the optimal estimator under a correctly specified, identified model; it does not make the model or its scale identified by monotonicity alone. A joint IRT model supplies one concrete way to estimate the conditional mean. We compare that implementation with simpler scores and with model-based estimates that use the two waves differently. The scale must be fixed explicitly: monotonicity alone identifies neither the amount learned nor, generally, individual gain rankings (Appendix \ref{app:estimation}).
+
+## A joint item-response model
+
+A joint IRT model fits the two waves together and estimates change directly. Let $Y_{ijt}$ indicate a correct response and $\theta_{it}$ denote knowledge on a common latent scale. For example,
+\begin{equation}
+\Pr(Y_{ijt}=1\mid\theta_{it})
+=g_j+(1-g_j)\operatorname{logit}^{-1}\!\left[a_j(\theta_{it}-d_j)\right],\label{eq:irt}
+\end{equation}
+where $a_j>0$ is discrimination, $d_j$ difficulty, and $g_j$ a lower asymptote. Common anchor items link the scale across waves; their response parameters must be invariant, or changes in item functioning must be modeled. A joint distribution for $(\theta_{i1},\theta_{i2})$ lets both waves inform each person's change. Measurement invariance is a substantive requirement for interpreting latent change [@millsap2010; @qian2018]. Responses to the same item across waves may remain dependent even after conditioning on ability, so local independence also needs checking.
+
+Let $X_{it}=\psi(\theta_{it})$ express knowledge on the target scale. The fitted model supplies
+\[
+\widehat{\Delta X}_i
+=\int\!\!\int\bigl[\psi(\theta_2)-\psi(\theta_1)\bigr]
+\widehat p(\theta_1,\theta_2\mid\mathcal Y_i)\,d\theta_1\,d\theta_2.
+\]
+This integrates gain itself. For nonlinear $\psi$, it differs from transforming two posterior mean abilities and subtracting them. A known $\psi$ is an identifying assumption; IRT alone cannot recover the relation to the proportion of all relevant facts known. Uncertainty must account for the posterior dependence between the two abilities and, for full inference, uncertainty in the item and population parameters. Fitting each wave separately, standardizing both to mean zero, and subtracting the scores would erase average change. Imposing nonnegative individual change or proportional learning in the prior would build that restriction into the answer; the data should also be fitted with a model allowing forgetting and different relations between baseline knowledge and gain.
+
+A latent-standard-deviation change is not a percentage of knowledge. For an interpretable amount, define a fixed reference set of items and weights $\omega_j\ge0$ summing to one. Under the knowledge-versus-guessing interpretation of (\ref{eq:irt}), define
+\[
+K(\theta)=\sum_j\omega_j\operatorname{logit}^{-1}\!\left[a_j(\theta-d_j)\right].
+\]
+Then estimate $E\{K(\theta_{i2})-K(\theta_{i1})\mid\mathbf Y_{i1},\mathbf Y_{i2}\}$ and its interval. This expresses change in the expected proportion of the reference items known, with guessing excluded. The reference items and weights stay fixed across waves. Unlike a raw ability difference, this quantity is unchanged by rescaling the IRT ability and item parameters together. Generalization to a larger topic requires a defensible item-sampling frame or external calibration; the tested items alone cannot represent everything there is to know. A generic IRT lower asymptote also need not be literal random guessing, so that interpretation requires its own evidence.
+
+The model should use incorrect and explicit ``don't know'' answers separately when the response process supports that distinction, while treating absent questionnaires as missing. A freely estimated guessing parameter for every person is unlikely to be well determined by a short battery; item-level guessing parameters, constrained by the answer options or external calibration, are a more defensible starting point. To study who learns, education and other predictors can enter the joint change model, with measurement invariance checked across groups. Regressing separately shrunken person scores as though they were observed learning would discard their uncertainty and can distort those associations.
+
+High agreement between IRT and conventional *level* scores cannot establish that their estimates of *change* perform alike. The relevant test is recovery of true gain on independent data, including respondents whose initial scores are already at the ceiling.
+
+## A head-to-head comparison
+
+We implement (\ref{eq:conditional-gain}) with a joint model for baseline log knowledge and its change. The baseline has mean zero and variance one, fixing the scale, and its change has an estimated mean, variance, and covariance with baseline. The pair has a working bivariate normal distribution. Knowledge is $X=\exp(\theta)$, a positive trait on this normalized scale, not the proportion of all knowable facts. Item slopes and intercepts are estimated subject to equality across waves; guessing probabilities are supplied by the test design. Slopes are constrained to $[0.2,5]$ and change variance to be at least $.0025$. We use marginal likelihood estimation [@chalmers2012], expanding the integration range when the fitted change distribution extends beyond it, followed by Gaussian quadrature to integrate gain. These are empirical Bayes estimates: the fitted item and population parameters are treated as known when scoring a new person.
+
+Each replication uses 300 training respondents and 1,000 independent test respondents answering the same items. Baseline log knowledge is standard normal. Proportional, additive, and catch-up learning use the same positive lognormal rate mechanism as the earlier simulations, with median .5 and log-scale standard deviation .5. The main scenarios have 5, 10, or 15 easy items; further scenarios broaden the difficulty range, vary guessing across items, or make the follow-up items easier without telling the fitted model. Unlike the earlier grid, this comparison does not select simulations for resemblance to the polls. All predictions target the same realized $X_{i2}-X_{i1}$ in a given replication. The fitted normal distribution of log change is an approximation even in the proportional-learning scenarios, rather than access to the true simulation law.
+
+We compare six procedures. Three are the original scores: raw gain, raw follow-up knowledge, and guessing-adjusted follow-up knowledge. The other three estimate an amount in the specified trait units: the joint posterior mean gain; the posterior mean gain using only follow-up responses; and the difference between posterior mean knowledge levels scored from each wave separately. The latter two use the same fitted model as the joint estimate, so this comparison holds item calibration fixed and changes how the response information is used. The fitted model sees no true knowledge or true gain. Raw questionnaire proportions and the positive knowledge trait have different units, so we compare all six by correlation and assess squared error only for the three estimates expressed in the target units.
+
+Of `r nrow(fit_runs)` attempted fits, `r sum(fit_runs$fit_status == "ok")` yield converged, numerically stable models. Tables \ref{tab:estimator-correlations} and \ref{tab:estimator-errors} compare methods on those same successful replications, with failures included in each scenario's fit count. The reported summaries are medians across training/test replications, not confidence intervals. The repository also records rank correlations, mean error, conditional interval coverage, and results for respondents who answered every baseline item correctly.
+
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+
+```{r estimator-correlations}
+comparison_summary |>
+  dplyr::filter(estimator %in% c("observed_gain", "post_score", "guess_adjusted_post", "joint_irt")) |>
+  dplyr::select(scenario, estimator, correlation) |>
+  tidyr::pivot_wider(names_from = estimator, values_from = correlation) |>
+  dplyr::full_join(fit_counts, by = "scenario", relationship = "one-to-one") |>
+  dplyr::arrange(match(scenario, names(scenario_labels))) |>
+  dplyr::mutate(
+    scenario = scenario_labels[scenario], fits = paste0(fits, "/", attempts),
+    dplyr::across(c(observed_gain, post_score, guess_adjusted_post, joint_irt), \(x) coef_text(x, 2))
+  ) |>
+  dplyr::select(scenario, fits, observed_gain, post_score, guess_adjusted_post, joint_irt) |>
+  knitr::kable(format = "latex", booktabs = TRUE, position = "H", linesep = "",
+    col.names = c("Scenario", "Fits", "Raw gain", "Follow-up", "Guess adjusted", "Joint IRT"),
+    caption = "Correlation with true gain in independent test respondents. Entries are median correlations across successful replications; Fits reports successful fits over all attempts. Learning is proportional except in the additive and catch-up rows. All scenarios use 10 items unless stated otherwise."
+  )
+```
+
+```{r estimator-errors}
+comparison_summary |>
+  dplyr::filter(estimator %in% c("joint_irt", "post_only_irt", "separate_irt")) |>
+  dplyr::select(scenario, estimator, rmse) |>
+  tidyr::pivot_wider(names_from = estimator, values_from = rmse) |>
+  dplyr::arrange(match(scenario, names(scenario_labels))) |>
+  dplyr::mutate(scenario = scenario_labels[scenario], dplyr::across(-scenario, \(x) num(x, 2))) |>
+  dplyr::select(scenario, joint_irt, post_only_irt, separate_irt) |>
+  knitr::kable(format = "latex", booktabs = TRUE, position = "H", linesep = "",
+    col.names = c("Scenario", "Joint gain", "Follow-up only", "Separate-wave difference"),
+    caption = "Root mean squared error for estimates of the amount learned. Lower is better. All three procedures use the same estimated model and predict gain in the same positive-trait units. Entries are medians over the successful replications in the correlation table. Raw score proportions are not in these units and are not assigned an RMSE."
+  )
+```
+
+\endgroup
+
+With 10 easy items and proportional learning, the joint estimate has median correlation `r num(comparison_value("easy_10", "joint_irt", "correlation"), 2)` with true gain, compared with `r num(comparison_value("easy_10", "post_score", "correlation"), 2)` for the follow-up score and `r num(comparison_value("easy_10", "observed_gain", "correlation"), 2)` for raw gain. Its median RMSE is `r num(comparison_value("easy_10", "joint_irt", "rmse"), 2)`, versus `r num(comparison_value("easy_10", "post_only_irt", "rmse"), 2)` using only follow-up responses; it has lower RMSE in `r sum(easy_10_pairs$joint_irt < easy_10_pairs$post_only_irt)` of the `r nrow(easy_10_pairs)` paired replications. More items and a broader difficulty range improve recovery. With only five easy items, however, the joint estimate's higher correlation does not translate into lower median squared error than the follow-up-only model.
+
+The departures matter. Under additive learning, the fitted joint estimator recovers little of the variation in true gain. Under catch-up learning, raw gain has the larger correlation, and the fitting software rejects some replications because a follow-up item is answered correctly by every training respondent. Making the follow-up items easier produces positive bias of `r num(comparison_value("item_drift", "joint_irt", "bias"), 2)` trait units and reduces joint conditional interval coverage to `r num(100 * comparison_value("item_drift", "joint_irt", "coverage"), 1)` percent. These intervals condition on estimated parameters; they are not full confidence intervals. Item-specific guessing adjustment also performs slightly worse than the raw follow-up score in this design.
+
+Thus the conditional mean is the optimal target under squared loss, but this fitted normal-change implementation is not uniformly best. The results support using both waves when the measurement and learning models are adequate. They also make flexible change distributions, item-invariance checks, and harder questions substantive parts of estimation. Ten replications per scenario provide an initial comparison, not a precise estimate of performance differences or a selection of one model for the polls.
+
+## Guessing-adjusted follow-up knowledge
+
+Suppose the same probability $g<1$ of a correct guess applies to every person and item. The usual correction to the observed follow-up proportion $y_{i2}$ is
+\[
+\widetilde x_{i2}=\frac{y_{i2}-g}{1-g}.
+\]
+It changes the units and level, but is a positive affine transformation. Therefore it has exactly the same ranking and correlation with true gain as $y_{i2}$. In our simulations, each process has one common guessing probability, so this correction cannot improve the follow-up score's correlation. Nor does it remove the ceiling. The statement concerns ranking and correlation, not bias in the mean proportion of questionnaire items known.
+
+Item-specific or person-specific guessing probabilities can change the ranking. If $Y_{ij2}$ is item correctness and $g_{ij}<1$ the probability of guessing correctly when the item is not known, the corrected contribution is
+\[
+\widetilde K_{ij2}=\frac{Y_{ij2}-g_{ij}}{1-g_{ij}}.
+\]
+With a correct answer certain when the item is known, this contribution has conditional expectation equal to the item's binary knowledge state. When the item is unknown its conditional variance is $g_{ij}/(1-g_{ij})$, so removing guessing bias can amplify noise. Estimated guessing probabilities add uncertainty. Negative corrected contributions should not simply be truncated to zero, which would undo the unbiasedness argument. If guessing varies with initial knowledge or the learning shock, the propositions' independence assumptions also need reconsideration. The item transition model of @cor2016 uses both waves to estimate learning about the questions asked under a no-forgetting restriction; it does not by itself identify each person's topic-wide learning.
+
+## What to do at the ceiling
+
+IRT cannot create information where the questions supply almost none. When a participant answers every easy item correctly, large ranges of high ability have almost the same likelihood. A precise estimate of additional learning may then come chiefly from the prior. Harder anchor items or an adaptive test can add information in this range [@montgomery2013]; repeated easy items alone cannot resolve it.
+
+Where the model is too weak to support a point estimate, bounds can be more informative. With deterministic threshold responses, no guessing, and externally calibrated item difficulties, each response pattern locates true knowledge in an interval $[L_{it},U_{it}]$. Hence
+\[
+\Delta X_i\in[L_{i2}-U_{i1},\ U_{i2}-L_{i1}].
+\]
+An independently justified no-forgetting assumption intersects this interval with $[0,\infty)$. A perfect score supplies a lower bound, with an upper bound only if one is known externally. With stochastic responses or guessing, these become probabilistic statements requiring an explicit response model, not deterministic bounds. Reporting wide uncertainty for a ceiling respondent is preferable to assigning that person either zero learning or a precise gain determined mainly by assumptions.
 
 # Conclusion
 
-Together, the oversampling of easy items, easily neared or hit ceilings, and the tendency of the most knowledgeable to learn the most make observed knowledge gain a weak measure of true knowledge gain. In these simulations, post-process knowledge, with baseline adjustment where appropriate, is often a more informative proxy. This is a measurement comparison under the stated assumptions, not identification of a causal effect of learning. When learning is nondecreasing in true initial knowledge and an independent scalar learning shock, the general model guarantees nonnegative covariance between post-process knowledge and learning. The corresponding conditional result holds given true initial knowledge; it does not guarantee a positive partial correlation given noisy observed initial knowledge. The simulations illustrate the distinction, and the poll comparisons show how conclusions about observed learning proxies depend on adjustment and measurement.
+The oversampling of easy items, easily reached ceilings, and the tendency of the most knowledgeable to learn the most can make observed gain a weak indicator of true gain. Post-process knowledge often tracks gain better in the simulated processes studied here, but neither its positive covariance nor its higher correlation makes it an estimate of the amount learned. Baseline adjustment answers a further, distinct question and can discard variation in learning that baseline knowledge predicts.
+
+Estimating how much people learn requires a common measurement scale, a defined domain, and a model of response error. The conditional mean of true gain given both waves minimizes squared error under an identified, correct model. Our fitted joint item-response implementation improves on simpler procedures in several proportional-learning scenarios, while its failures under additive learning and item drift show why that theoretical result does not guarantee a good fitted estimator. A fixed reference-item scale can make the target more interpretable, but the amount learned remains dependent on measurement and learning assumptions that the covariance results do not supply. The poll comparisons establish associations with observed scores; they do not establish who learned more on an unobserved topic-wide scale or the causal effect of learning on attitudes.
 
 # References {-}
 
+\begingroup
+\small
 <div id="refs"></div>
+\endgroup
 
+\clearpage
 \appendix
+\counterwithin{table}{section}
+\renewcommand{\thetable}{\Alph{section}\arabic{table}}
+\section*{Appendix}
 
 # Proofs {#app:proofs}
 
-*Result 1 and Condition 1a.* Since $\rho_{\Delta x \Delta X}$'s sign is that of $\sigma_{\Delta x \Delta X}$, $\rho_{\Delta x \Delta X} < 0$ exactly when $(\beta - 1)(b_2\beta - b_1)\sigma^2_{X_1} + b_2\sigma^2_v < 0$. The second addend is always positive; by (\ref{eq:rich}) and (\ref{eq:ceiling}), the first is always negative. So $\rho_{\Delta x \Delta X} < 0$ if and only if $-(\beta - 1)(b_2\beta - b_1)\sigma^2_{X_1}$ exceeds $b_2\sigma^2_v$, which is Condition 1a.
+## Result 1 and Condition 1a
 
-*Result 2.* $\sigma_{x_2 \Delta X} = (\beta - 1) b_2 \beta \sigma^2_{X_1} + b_2 \sigma^2_v$, and both addends are positive by (\ref{eq:bias}) and (\ref{eq:rich}).
+The correlation has the sign of its covariance. By (\ref{eq:c1}),
+\begin{align*}
+\rho_{\Delta x\Delta X}<0
+&\iff (\beta-1)(b_2\beta-b_1)\sigma^2_{X_1}+b_2\sigma^2_v<0\\
+&\iff (\beta-1)(b_1-b_2\beta)\sigma^2_{X_1}>b_2\sigma^2_v.
+\end{align*}
+The last inequality is Condition 1a. Its left side is positive by (\ref{eq:rich}) and (\ref{eq:ceiling}), so the covariance can be negative when the learning disturbance has sufficiently small variance.
 
-*Result 3 and Conditions 3a--3d.* $\rho_{\Delta x \Delta X} < \rho_{x_2 \Delta X}$ if and only if $\sigma_{x_2 \Delta X}/\sigma_{x_2} > \sigma_{\Delta x \Delta X}/\sigma_{\Delta x}$. A jointly sufficient condition is that $\sigma_{x_2 \Delta X} > \sigma_{\Delta x \Delta X}$ and $\sigma^2_{x_2} < \sigma^2_{\Delta x}$. By (\ref{eq:c1}) and (\ref{eq:c2}), the first is equivalent, after subtracting $b_2\sigma^2_v$ and dividing by $(\beta - 1)\sigma^2_{X_1}$, to $b_2\beta > b_2\beta - b_1$, that is, $b_1 > 0$, which always holds. So $\sigma^2_{x_2} < \sigma^2_{\Delta x}$ alone is sufficient. By (\ref{eq:v1}) and (\ref{eq:v2}), it holds if and only if $b_2^2\beta^2\sigma^2_{X_1} < (b_2\beta - b_1)^2\sigma^2_{X_1} + \sigma^2_{u_1}$, that is, $(b_1 - 2b_2\beta)b_1\sigma^2_{X_1} + \sigma^2_{u_1} > 0$: Condition 3a. Condition 3b makes the first term nonnegative. Condition 3c follows from Results 1 and 2: if $\rho_{\Delta x \Delta X} < 0 < \rho_{x_2 \Delta X}$, the inequality holds. For 3d, since $\Delta x_i = x_{i2} - x_{i1}$, $\sigma^2_{x_2} < \sigma^2_{\Delta x}$ if and only if $0 < \sigma^2_{x_1} - 2\sigma_{x_1 x_2}$, that is, $\gamma_{21} < .5$.
+## Result 2
 
-*Guessing.* With $k_i = \kappa r_i$, $\Delta y_i = (1 - k_i)\Delta x_i$ and $y_{i2} = (1 - k_i)x_{i2} + k_i$. Since $k_i$ is independent of $\Delta x_i$, $x_{i2}$ and $\Delta X_i$, $C((1 - k_i)\Delta x_i, \Delta X_i) = E(1 - k_i)\,C(\Delta x_i, \Delta X_i)$, and likewise for $y_{i2}$.
+By (\ref{eq:c2}),
+\[
+\sigma_{x_2\Delta X}
+=(\beta-1)b_2\beta\sigma^2_{X_1}+b_2\sigma^2_v>0.
+\]
+Both addends are positive by (\ref{eq:bias}) and (\ref{eq:rich}). The correlation is therefore positive too.
 
-*Propositions 1 and 2.* Condition on the item difficulties. Let $U_i$ collect the independent randomness in knowing items and in guessing at time 2. Then $x_{i2} = \phi(X_{i1} + h(X_{i1}, R_i), U_i)$ with $\phi$ nondecreasing in its first argument. Write $\bar\phi(X_{i1}, R_i) = E[x_{i2} \mid X_{i1}, R_i]$, nondecreasing in both arguments when $h$ is. Since $\Delta X_i$ does not depend on $U_i$, $\mathrm{Cov}(x_{i2}, \Delta X_i) = \mathrm{Cov}(\bar\phi(X_{i1}, R_i), h(X_{i1}, R_i))$. $X_{i1}$ and $R_i$ are independent, hence associated [@esary1967], and two nondecreasing functions of associated variables have nonnegative covariance. Given $X_{i1}$, $\bar\phi$ and $h$ are nondecreasing functions of $R_i$ alone, whose covariance is nonnegative [@harris1960]. Proposition 2 concerns true initial knowledge; holding observed initial knowledge constant, a coarse and noisy measure of it, the partial correlation was negative in `r sum(prop$x2_given_x1 < 0)` of the `r count(nrow(prop))` plausible simulated processes with proportional learning.
+## Result 3 and Conditions 3a--3d
+
+First, post-process knowledge always has the larger covariance with true gain:
+\[
+\sigma_{x_2\Delta X}-\sigma_{\Delta x\Delta X}
+=(\beta-1)b_1\sigma^2_{X_1}>0.
+\]
+If the gain covariance is nonpositive, Result 2 gives the desired correlation ordering immediately. If it is positive, the ordering also follows whenever post-process knowledge has the smaller variance. Thus
+\[
+\sigma^2_{x_2}<\sigma^2_{\Delta x}
+\quad\Longrightarrow\quad
+\rho_{x_2\Delta X}>\rho_{\Delta x\Delta X}.
+\]
+
+**Conditions 3a and 3b.** Subtracting (\ref{eq:v2}) from (\ref{eq:v1}) gives
+\begin{align*}
+\sigma^2_{\Delta x}-\sigma^2_{x_2}
+&=\bigl[(b_2\beta-b_1)^2-b_2^2\beta^2\bigr]\sigma^2_{X_1}
+  +\sigma^2_{u_1}\\
+&=(b_1-2b_2\beta)b_1\sigma^2_{X_1}+\sigma^2_{u_1}.
+\end{align*}
+Positivity is Condition 3a. Condition 3b makes the first term nonnegative; the strictly positive measurement-error variance makes the sum positive.
+
+**Condition 3c.** Condition 1a and Result 2 imply
+\[
+\rho_{\Delta x\Delta X}<0<\rho_{x_2\Delta X}.
+\]
+
+**Condition 3d.** Since $\Delta x_i=x_{i2}-x_{i1}$,
+\begin{align*}
+\sigma^2_{\Delta x}-\sigma^2_{x_2}>0
+&\iff \sigma^2_{x_1}-2\sigma_{x_1x_2}>0\\
+&\iff \gamma_{21}=\frac{\sigma_{x_1x_2}}{\sigma^2_{x_1}}<\frac12.
+\end{align*}
+
+\clearpage
+
+## Guessing
+
+Write $k_i=\kappa r_i$. The score and gain become
+\[
+y_{i2}=(1-k_i)x_{i2}+k_i,
+\qquad
+\Delta y_i=(1-k_i)\Delta x_i.
+\]
+Independence of $k_i$ from the knowledge scores and true gain gives
+\begin{align*}
+\operatorname{Cov}(\Delta y_i,\Delta X_i)
+&=E(1-k_i)\operatorname{Cov}(\Delta x_i,\Delta X_i),\\
+\operatorname{Cov}(y_{i2},\Delta X_i)
+&=E(1-k_i)\operatorname{Cov}(x_{i2},\Delta X_i).
+\end{align*}
+The multiplier is nonnegative and is positive unless everyone guesses correctly with probability one. The strict signs of Results 1 and 2 survive whenever it is positive.
+
+## Propositions 1 and 2
+
+Fix the questionnaire's item difficulties. Let $m(s)$ be the expected time-2 score at true knowledge $s$, averaging over item-response and guessing randomness that is independent of $(X_{i1},R_i)$. Under the monotone item-response model, $m$ is nondecreasing. Define
+\[
+q(x,r)=m\bigl(x+h(x,r)\bigr).
+\]
+Because true gain is determined by $(X_{i1},R_i)$, the law of total covariance gives
+\[
+\operatorname{Cov}(x_{i2},\Delta X_i)
+=\operatorname{Cov}\bigl(q(X_{i1},R_i),h(X_{i1},R_i)\bigr).
+\]
+
+**Proposition 1.** If $h$ is nondecreasing in both arguments, so is $q$. The variables $X_{i1}$ and $R_i$ are independent and hence associated [@esary1967]. Two nondecreasing functions of associated variables have nonnegative covariance. Therefore
+\[
+\operatorname{Cov}(x_{i2},\Delta X_i)\ge0.
+\]
+
+**Proposition 2.** Conditional on $X_{i1}=x$, both $q(x,R_i)$ and $h(x,R_i)$ are nondecreasing functions of the scalar $R_i$. Their covariance is nonnegative [@harris1960], giving
+\[
+\operatorname{Cov}(x_{i2},\Delta X_i\mid X_{i1}=x)\ge0.
+\]
+This proof does not require $h$ to be nondecreasing in its first argument.
+
+The conditioning variable in Proposition 2 is true initial knowledge. The result does not guarantee a nonnegative partial correlation after adjusting for noisy observed initial knowledge: that partial correlation is negative in `r sum(prop$x2_given_x1 < 0)` of the `r count(nrow(prop))` retained proportional-learning simulations.
+
+\clearpage
 
 # The polls and further results {#app:further}
 
@@ -237,7 +470,14 @@ Together, the oversampling of easy items, easily neared or hit ceilings, and the
 ```{r features}
 features |>
   dplyr::arrange(mean_x1) |>
-  dplyr::mutate(dplyr::across(-pollname, \(x) coef_text(x, 2)), pollname = gsub("&", "\\\\&", pollname)) |>
+  dplyr::mutate(
+    dplyr::across(-pollname, \(x) coef_text(x, 2)),
+    pollname = dplyr::recode(pollname,
+      "By the People 2004 US Presidential Primaries" = "By the People: US Primaries, 2004",
+      "By the People 2004 US General Election" = "By the People: US Election, 2004"
+    ),
+    pollname = gsub("&", "\\\\&", pollname)
+  ) |>
   knitr::kable(
     format = "latex", booktabs = TRUE, position = "H", linesep = "", align = "lrrrrrr",
     col.names = c("Poll", "Mean $x_1$", "Mean gain", "SD $x_1$", "$r(x_1, x_2)$", "$r(\\Delta x, x_1)$", "$\\gamma_{21}$"),
@@ -256,9 +496,48 @@ attitudes |>
   dplyr::select(proxy, indices, share_positive, share_significant_positive, share_significant_negative) |>
   knitr::kable(
     format = "latex", booktabs = TRUE, position = "H", linesep = "", align = "lrrrr",
-    col.names = c("Proxy", "Indices", "Positive", "Significantly positive", "Significantly negative"),
+    col.names = c("Proxy", "Indices", "Positive", "Sig. positive", "Sig. negative"),
     caption = "Learning and attitude change. Each attitude index's change is regressed on the proxy and the distance from the small group's mean; the proxy's coefficient is signed so that positive means moving with the sample's net change. Significance at the 5% level with standard errors clustered by small group."
   )
 ```
 
 \endgroup
+
+\clearpage
+
+# Scale identification and linear prediction {#app:estimation}
+
+## What the assumptions identify
+
+Under the general model, the response function is only required to be monotone. Rescaling true knowledge and the item difficulties by the same positive constant leaves every response probability unchanged while rescaling true gain. Thus the observations do not identify the amount learned without a scale calibration. Under proportional learning, even an increasing power transformation preserves the rich-get-richer structure:
+\[
+X_{i2}=X_{i1}(1+R_i)
+\quad\Longrightarrow\quad
+X_{i2}^{p}-X_{i1}^{p}
+=X_{i1}^{p}\bigl[(1+R_i)^p-1\bigr],\qquad p>0.
+\]
+Transforming the response function accordingly leaves the response distribution unchanged. Different powers can change which of two people with different initial knowledge and learning shocks gained more. A monotone knowledge scale therefore need not identify rankings of individual gains either.
+
+This limitation is especially consequential for the proportion of *all* relevant facts known. A short, deliberately easy questionnaire does not identify its relation to that universe. The gamma trait used in the simulations supplies a scale by assumption. Its gains are meaningful within those simulated worlds, but are not estimates of the fraction of all political knowledge acquired by poll participants.
+
+## Combining both waves in the linear model
+
+Even within the linear model, choosing between a raw difference and the post-process score leaves useful information unused. Let $z_i=(x_{i1}-E x_{i1},x_{i2}-E x_{i2})^\mathsf{T}$, $\Sigma=\operatorname{Var}(z_i)$, and $c=\operatorname{Cov}(z_i,\Delta X_i)$. The predictor with the smallest mean squared error among affine functions of both scores is
+\begin{equation}
+\widehat{\Delta X}_i=E(\Delta X_i)+c^\mathsf{T}\Sigma^{-1}z_i.\label{eq:projection}
+\end{equation}
+The model gives
+\[
+c=\begin{pmatrix}
+b_1(\beta-1)\sigma^2_{X_1}\\
+b_2\{\beta(\beta-1)\sigma^2_{X_1}+\sigma^2_v\}
+\end{pmatrix}.
+\]
+Writing $D=\det(\Sigma)>0$, the weight on the baseline score is
+\begin{equation}
+w_1=\frac{b_1\sigma^2_{X_1}
+\{(\beta-1)\sigma^2_{u_2}-b_2^2\sigma^2_v\}}{D}.\label{eq:baseline-weight}
+\end{equation}
+It can be positive or negative. When baseline knowledge predicts learning and the follow-up score is noisy, baseline information can help predict gain with a positive weight. When variation in the learning disturbance dominates, subtracting baseline information helps distinguish new knowledge from old. Neither a weight of $-1$, as in observed gain, nor zero, as in the post-process score, is generally optimal.
+
+Equation (\ref{eq:projection}) is a population benchmark, not an estimator identified by the two scores alone. It requires the measurement slopes, error variances, and learning moments. Repeated indicators, external calibration, or explicit sensitivity assumptions must supply that information. No normality assumption is needed for the best affine predictor; interpreting it as the full conditional mean requires more structure.

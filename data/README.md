@@ -1,7 +1,7 @@
 # Data inputs
 
 The analysis uses the maintained 21-poll wide export from
-[dp-data at commit 681d08a](https://github.com/soodoku/dp-data/tree/681d08ad72dfb50fa24eccfb837fd48f3db9a700).
+[dp-data at commit f88da7f](https://github.com/soodoku/dp-data/tree/f88da7fa904cde55044dd3dda9fd337ca26cb8bd).
 The full commit, upstream paths, schema versions and SHA-256 checksums are in
 [`sources.csv`](sources.csv). The local `.tab` files are exact upstream bytes;
 Git does not translate their line endings.
@@ -16,7 +16,7 @@ corrections to questionnaire presence, item scoring, attitude definitions,
 demographics and group membership. It restores two BTP General Election
 participants and retains one record per person, unlike the historical deposit's
 217 duplicate Primaries records. Missing questionnaires remain missing.
-The upstream [issue register](https://github.com/soodoku/dp-data/blob/681d08ad72dfb50fa24eccfb837fd48f3db9a700/docs/poll-issues.md)
+The upstream [issue register](https://github.com/soodoku/dp-data/blob/f88da7fa904cde55044dd3dda9fd337ca26cb8bd/docs/poll-issues.md)
 records resolved and unresolved source questions. Those unresolved questions
 are not removed by adopting this snapshot.
 

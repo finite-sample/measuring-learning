@@ -3,6 +3,20 @@ test_that("constant outcomes have undefined correlations without numerical warni
   expect_warning(result <- proxy_correlations(sim), NA)
   expect_true(is.na(result$x2))
   expect_true(is.na(result$x2_given_x1))
+  expect_true(is.na(result$x2_residualized))
+})
+
+test_that("score correlations retain learning explained by baseline in the target", {
+  initial <- c(-3, -1, 1, 3)
+  shock <- c(1, -1, -1, 1)
+  sim <- tibble::tibble(
+    x1 = initial, x2 = 2 * initial + shock,
+    true_gain = 10 * initial + shock, observed_gain = x2 - x1
+  )
+  result <- proxy_correlations(sim)
+  expect_equal(result$x2_given_x1, 1)
+  expect_equal(result$x2_residualized, 1 / sqrt(501))
+  expect_gt(result$x2, result$x2_residualized)
 })
 
 test_that("nonfinite features do not define a plausible poll", {

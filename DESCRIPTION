@@ -19,11 +19,13 @@ Imports:
     ggplot2,
     knitr,
     lme4,
+    mirt,
     purrr,
     readr,
     rmarkdown,
     rprojroot,
     sandwich,
+    statmod,
     tibble,
     tidyr,
     withr

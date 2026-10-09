@@ -1,4 +1,4 @@
-.PHONY: restore snapshot analysis figures paper manuscript format lint test check ci-docker clean
+.PHONY: restore snapshot analysis estimation figures paper manuscript format lint test check ci-docker clean
 
 restore:
 	Rscript -e 'renv::restore(prompt = FALSE)'
@@ -9,7 +9,12 @@ snapshot:
 analysis:
 	Rscript scripts/run_all.R
 
-figures: analysis
+estimation: tabs/estimator_comparison.csv
+
+tabs/estimator_comparison.csv: R/irt.R R/estimator_comparison.R R/simulate.R scripts/compare_estimators.R renv.lock
+	Rscript scripts/compare_estimators.R
+
+figures: analysis estimation
 	Rscript scripts/figures.R
 
 paper: figures

@@ -42,8 +42,8 @@ simulate_process <- function(n = 1000, items = 10, easiest = 0.05, hardest = 0.6
   tibble::tibble(true_gain = x2_true - x1_true, x1 = x1, x2 = x2, observed_gain = x2 - x1)
 }
 
-# Correlations of each proxy with true gain. Given x1, the observed gain and x2
-# carry the same information: their partial correlations with true gain are equal.
+# Keep score prediction and partial association separate: residualizing true
+# gain changes the target, whereas residualizing only x2 keeps it fixed.
 cor_if_variable <- function(x, y) {
   if (length(x) < 2 || any(!is.finite(x)) || any(!is.finite(y)) || stats::sd(x) == 0 || stats::sd(y) == 0) {
     return(NA_real_)
@@ -52,6 +52,7 @@ cor_if_variable <- function(x, y) {
 }
 
 proxy_correlations <- function(sim) {
+  residual_score <- stats::resid(stats::lm(x2 ~ x1, sim))
   partial <- if (stats::sd(sim$x2) == 0 || stats::sd(sim$true_gain) == 0) {
     NA_real_
   } else {
@@ -60,6 +61,7 @@ proxy_correlations <- function(sim) {
   tibble::tibble(
     observed_gain = cor_if_variable(sim$observed_gain, sim$true_gain),
     x2 = cor_if_variable(sim$x2, sim$true_gain),
+    x2_residualized = if (stats::sd(sim$x2) == 0) NA_real_ else cor_if_variable(residual_score, sim$true_gain),
     x2_given_x1 = partial,
     mean_x1 = mean(sim$x1),
     mean_gain = mean(sim$observed_gain),

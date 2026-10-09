@@ -4,15 +4,15 @@ read_tab <- \(name) readr::read_csv(file.path("tabs", name), show_col_types = FA
 
 proxies <- c(
   observed_gain = "Observed gain", x2 = "Post-process knowledge",
-  x2_given_x1 = "Post-process knowledge given initial"
+  x2_residualized = "Baseline-residualized post score"
 )
 forms <- c(
-  proportional = "The knowledgeable learn more", additive = "Everyone learns alike",
+  proportional = "The knowledgeable learn more", additive = "Learning unrelated to initial knowledge",
   catch_up = "The less knowledgeable learn more"
 )
 
 # Figure 1. Correlation of each proxy with true gain across simulated processes
-# whose observable features match a real Deliberative Poll.
+# whose observable features fall within the marginal ranges across polls.
 worlds <- read_tab("simulations.csv") |>
   dplyr::filter(plausible) |>
   tidyr::pivot_longer(dplyr::all_of(names(proxies)), names_to = "proxy", values_to = "correlation") |>
