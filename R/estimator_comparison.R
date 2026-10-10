@@ -27,7 +27,7 @@ compare_learning_estimators <- function(scenario, replicate, seed, training_n = 
     x1 <- rowMeans(test$pre)
     x2 <- rowMeans(test$post)
     adjusted <- rowMeans(sweep(sweep(test$post, 2, test$guess, `-`), 2, 1 - test$guess, `/`))
-    scores <- list(observed_gain = x2 - x1, post_score = x2, guess_adjusted_post = adjusted)
+    scores <- list(baseline = x1, observed_gain = x2 - x1, post_score = x2, guess_adjusted_post = adjusted)
     status <- "ok"
     warnings <- ""
     fitted <- tryCatch(fit_joint_irt(train$pre, train$post, train$guess), error = identity)

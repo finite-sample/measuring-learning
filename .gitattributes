@@ -1,1 +1,1 @@
-data/raw/*.tab -text -whitespace
+tabs/*.csv -whitespace

@@ -1,10 +1,7 @@
-.PHONY: restore snapshot analysis estimation figures paper manuscript format lint test check ci-docker clean
+.PHONY: restore analysis estimation figures paper manuscript format lint test check ci-docker clean
 
 restore:
 	Rscript -e 'renv::restore(prompt = FALSE)'
-
-snapshot:
-	Rscript scripts/snapshot_sources.R
 
 analysis:
 	Rscript scripts/run_all.R
@@ -35,7 +32,9 @@ test:
 check: paper lint test
 
 ci-docker:
-	docker run --rm -v "$(PWD):/project" -w /project rocker/verse:4.6.0 \
+	docker run --rm -v "$(PWD):/project" \
+		-v "$${DP_DATA_ROOT:-$(abspath ../dp-data)}:/dp-data:ro" \
+		-e DP_DATA_ROOT=/dp-data -w /project rocker/verse:4.6.0 \
 		bash -lc "Rscript -e 'install.packages(\"renv\", repos = \"https://cloud.r-project.org\")' && make restore check"
 
 clean:

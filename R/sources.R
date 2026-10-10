@@ -4,21 +4,29 @@ project_file <- function(...) {
 
 source_manifest <- readr::read_csv(project_file("data", "sources.csv"), show_col_types = FALSE)
 
-verify_sources <- function(manifest = source_manifest, root = project_file()) {
-  paths <- file.path(root, manifest$path)
+dp_data_root <- function() Sys.getenv("DP_DATA_ROOT", unset = project_file("..", "dp-data"))
+
+source_path <- function(name, root = dp_data_root()) {
+  index <- match(name, source_manifest$source)
+  if (is.na(index)) stop("Unknown source: ", name)
+  file.path(root, source_manifest$upstream_path[index])
+}
+
+verify_sources <- function(manifest = source_manifest, root = dp_data_root()) {
+  paths <- file.path(root, manifest$upstream_path)
   if (any(!file.exists(paths))) {
-    stop("Missing source: ", paste(manifest$path[!file.exists(paths)], collapse = ", "))
+    stop("Missing source: ", paste(manifest$upstream_path[!file.exists(paths)], collapse = ", "))
   }
   observed <- vapply(paths, digest::digest, "", algo = "sha256", file = TRUE)
   mismatch <- is.na(manifest$sha256) | unname(observed) != manifest$sha256
   if (any(mismatch)) {
-    stop("Checksum mismatch: ", paste(manifest$path[mismatch], collapse = ", "))
+    stop("Checksum mismatch: ", paste(manifest$upstream_path[mismatch], collapse = ", "))
   }
   invisible(TRUE)
 }
 
 # The maintained dp-data export has one row per participant.
-read_polardata <- function(path = project_file("data", "raw", "polardata.tab")) {
+read_polardata <- function(path = source_path("participants")) {
   data <- readr::read_tsv(path, col_types = readr::cols(
     .default = readr::col_double(), pollname = readr::col_character(), bettered = readr::col_logical()
   ))
@@ -33,7 +41,7 @@ read_polardata <- function(path = project_file("data", "raw", "polardata.tab")) 
     assertr::verify(dplyr::n_distinct(dpnum) == 21)
 }
 
-read_indices <- function(path = project_file("data", "raw", "poll_indices.tab")) {
+read_indices <- function(path = source_path("indices")) {
   indices <- readr::read_tsv(path, col_types = "dcdcccd")
   readr::stop_for_problems(indices)
   stopifnot(nrow(indices) == 129, !anyNA(indices), !anyDuplicated(indices[c("dpnum", "att_index")]))

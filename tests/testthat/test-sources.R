@@ -12,13 +12,13 @@ test_that("sparse attitude columns retain numeric values beyond the guessing sam
   expect_equal(actual$attitude[2], 0.5)
 })
 
-test_that("source hashes reject modified and missing snapshots", {
+test_that("source hashes reject modified and missing upstream exports", {
   expect_true(verify_sources())
   root <- withr::local_tempdir()
   path <- file.path(root, "fixture.tab")
   writeLines("original", path)
   hash <- digest::digest(path, algo = "sha256", file = TRUE)
-  manifest <- tibble::tibble(path = "fixture.tab", sha256 = hash)
+  manifest <- tibble::tibble(upstream_path = "fixture.tab", sha256 = hash)
   expect_true(verify_sources(manifest, root))
   writeLines("modified", path)
   expect_error(verify_sources(manifest, root), "Checksum mismatch: fixture.tab")
@@ -36,4 +36,12 @@ test_that("conflicting participant IDs cannot silently enter the analysis", {
   )
   readr::write_tsv(d, path)
   expect_error(read_polardata(path), "participant")
+})
+
+
+test_that("sources are read directly from the configured dp-data checkout", {
+  root <- withr::local_tempdir()
+  withr::local_envvar(DP_DATA_ROOT = root)
+  expect_identical(source_path("items"), file.path(root, "output/analysis/analysis_items.parquet"))
+  expect_error(source_path("unknown"), "Unknown source")
 })

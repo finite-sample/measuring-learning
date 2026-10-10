@@ -59,6 +59,7 @@ proxy_correlations <- function(sim) {
     cor_if_variable(stats::resid(stats::lm(x2 ~ x1, sim)), stats::resid(stats::lm(true_gain ~ x1, sim)))
   }
   tibble::tibble(
+    baseline = cor_if_variable(sim$x1, sim$true_gain),
     observed_gain = cor_if_variable(sim$observed_gain, sim$true_gain),
     x2 = cor_if_variable(sim$x2, sim$true_gain),
     x2_residualized = if (stats::sd(sim$x2) == 0) NA_real_ else cor_if_variable(residual_score, sim$true_gain),

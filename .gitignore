@@ -15,4 +15,6 @@ ms/*.fls
 ms/*.xdv
 ms/*.tex
 ms/*_files/
-data/cache/
+archive/kgains/
+.deps/
+docs/legacy-sources/
