@@ -1,4 +1,4 @@
-purrr::walk(list.files("R", full.names = TRUE), source)
+purrr::walk(list.files("R", pattern = "^[a-z].*\\.R$", full.names = TRUE), source)
 dir.create("figs", showWarnings = FALSE)
 read_tab <- \(name) readr::read_csv(file.path("tabs", name), show_col_types = FALSE)
 

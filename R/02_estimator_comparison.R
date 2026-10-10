@@ -1,4 +1,4 @@
-purrr::walk(list.files("R", full.names = TRUE), source)
+purrr::walk(list.files("R", pattern = "^[a-z].*\\.R$", full.names = TRUE), source)
 scenarios <- estimator_scenarios()
 jobs <- expand.grid(scenario = seq_len(nrow(scenarios)), replicate = seq_len(10))
 cores <- as.integer(Sys.getenv("IRT_CORES", "1"))

@@ -1,1 +1,1 @@
-purrr::walk(list.files("../../R", full.names = TRUE), source)
+purrr::walk(list.files("../../R", pattern = "^[a-z].*\\.R$", full.names = TRUE), source)

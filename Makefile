@@ -4,15 +4,15 @@ restore:
 	Rscript -e 'renv::restore(prompt = FALSE)'
 
 analysis:
-	Rscript scripts/run_all.R
+	Rscript R/01_analysis.R
 
 estimation: tabs/estimator_comparison.csv
 
-tabs/estimator_comparison.csv: R/irt.R R/estimator_comparison.R R/simulate.R scripts/compare_estimators.R renv.lock
-	Rscript scripts/compare_estimators.R
+tabs/estimator_comparison.csv: R/irt.R R/estimator_comparison.R R/simulate.R R/02_estimator_comparison.R renv.lock
+	Rscript R/02_estimator_comparison.R
 
 figures: analysis estimation
-	Rscript scripts/figures.R
+	Rscript R/03_figures.R
 
 paper: figures
 	$(MAKE) manuscript
@@ -21,10 +21,10 @@ manuscript:
 	Rscript -e 'options(tinytex.install_packages = FALSE); rmarkdown::render("ms/main.Rmd", knit_root_dir = getwd(), quiet = TRUE)'
 
 format:
-	Rscript -e 'styler::style_dir("R"); styler::style_dir("scripts"); styler::style_dir("tests")'
+	Rscript -e 'styler::style_dir("R"); styler::style_dir("tests")'
 
 lint:
-	Rscript -e 'l <- unlist(lapply(c("R", "scripts", "tests"), lintr::lint_dir), recursive = FALSE); print(l); quit(status = as.integer(length(l) > 0))'
+	Rscript -e 'l <- unlist(lapply(c("R", "tests"), lintr::lint_dir), recursive = FALSE); print(l); quit(status = as.integer(length(l) > 0))'
 
 test:
 	Rscript -e 'testthat::test_dir("tests/testthat", stop_on_failure = TRUE)'

@@ -72,8 +72,13 @@ Set `DP_DATA_ROOT` to use another local clone. Changing the upstream revision re
 | Folder | Contents |
 |---|---|
 | `data/sources.csv` | Upstream paths, revision and SHA-256 checksums |
-| `R/` | Simulation and joint IRT models, estimator comparisons, attitude and education analyses, figure style |
-| `scripts/` | Analysis and figure generation |
+| `R/` | Numbered analysis stages and supporting functions |
 | `tabs/`, `figs/` | Generated tables and figures |
 | `ms/` | Manuscript source, bibliography and PDF |
 | `tests/` | Checks on the model and the outputs |
+
+The numbered files in `R/` run in order: `01_analysis.R` generates the main
+results, `02_estimator_comparison.R` compares the learning estimators, and
+`03_figures.R` draws the figures. Unnumbered files define the functions these
+stages use. Run the stages from the repository root, or use `make check` to
+run them and build the manuscript.
