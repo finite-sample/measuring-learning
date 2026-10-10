@@ -25,8 +25,7 @@ header-includes:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = "center", fig.pos = "H")
 options(knitr.graphics.rel_path = FALSE)
-source("R/paper.R")
-figure <- \(name) knitr::include_graphics(normalizePath(file.path("figs", paste0(name, ".pdf"))))
+source("R/00_common.R")
 sims <- read_tab("simulations.csv")
 features <- read_tab("poll_features.csv")
 learners <- read_tab("who_learns.csv")
@@ -431,8 +430,8 @@ features |>
     ),
     pollname = gsub("&", "\\\\&", pollname)
   ) |>
-  knitr::kable(
-    format = "latex", booktabs = TRUE, position = "H", linesep = "", align = "lrrrrrr",
+  table_evidence(
+    align = "lrrrrrr",
     col.names = c("Poll", "Mean $x_1$", "Mean gain", "SD $x_1$", "$r(x_1, x_2)$", "$r(\\Delta x, x_1)$", "$\\gamma_{21}$"),
     escape = FALSE,
     caption = "Observable features of the Deliberative Polls. The first five judge which simulated processes are plausible; $\\gamma_{21}$ is the slope of the regression of $x_2$ on $x_1$ (Condition 3d)."
@@ -447,8 +446,8 @@ attitudes |>
     dplyr::across(c(share_positive, share_significant_positive, share_significant_negative), \(x) coef_text(x, 2))
   ) |>
   dplyr::select(proxy, indices, share_positive, share_significant_positive, share_significant_negative) |>
-  knitr::kable(
-    format = "latex", booktabs = TRUE, position = "H", linesep = "", align = "lrrrr",
+  table_evidence(
+    align = "lrrrr",
     col.names = c("Proxy", "Indices", "Positive", "Sig. positive", "Sig. negative"),
     caption = "Learning and attitude change. Each attitude index's change is regressed on the proxy and the distance from the small group's mean; the proxy's coefficient is signed so that positive means moving with the sample's net change. Significance at the 5% level with standard errors clustered by small group."
   )
@@ -653,7 +652,7 @@ comparison_summary |>
     dplyr::across(c(baseline, observed_gain, post_score, guess_adjusted_post, joint_irt), \(x) coef_text(x, 2))
   ) |>
   dplyr::select(scenario, fits, baseline, observed_gain, post_score, guess_adjusted_post, joint_irt) |>
-  knitr::kable(format = "latex", booktabs = TRUE, position = "H", linesep = "",
+  table_evidence(
     col.names = c("Scenario", "Fits", "Initial", "Gain", "Follow-up", "Guess adj.", "Joint IRT"),
     caption = "Correlation with true gain in independent test respondents. Entries are median correlations across successful replications; Fits reports successful fits over all attempts. Learning is proportional except in the additive and catch-up rows. All scenarios use 10 items unless stated otherwise."
   )
@@ -667,7 +666,7 @@ comparison_summary |>
   dplyr::arrange(match(scenario, names(scenario_labels))) |>
   dplyr::mutate(scenario = scenario_labels[scenario], dplyr::across(-scenario, \(x) num(x, 2))) |>
   dplyr::select(scenario, joint_irt, post_only_irt, separate_irt) |>
-  knitr::kable(format = "latex", booktabs = TRUE, position = "H", linesep = "",
+  table_evidence(
     col.names = c("Scenario", "Joint gain", "Follow-up only", "Separate-wave difference"),
     caption = "Root mean squared error for estimates of the amount learned. Lower is better. All three procedures use the same estimated model and predict gain in the same positive-trait units. Entries are medians over the successful replications in the correlation table. Raw score proportions are not in these units and are not assigned an RMSE."
   )
@@ -714,7 +713,7 @@ domains |>
     coverage = dplyr::recode(coverage, balanced = "Both domains", one_domain = "First domain"),
     exposure = dplyr::recode(exposure, all = "All", first_domain = "First domain", second_domain = "Second domain")) |>
   dplyr::select(coverage, exposure, baseline, observed_gain, post_score) |>
-  knitr::kable(format = "latex", booktabs = TRUE, position = "H", linesep = "",
+  table_evidence(
     col.names = c("Questionnaire", "Exposure", "Initial", "Gain", "Follow-up"),
     caption = "Median correlation with equally weighted total true gain across 100 replications. Each questionnaire has ten questions. Exposure identifies the domain receiving all new information; results for all respondents pool the two randomized exposure groups.")
 ```
@@ -731,6 +730,6 @@ The empirical item validation retains the historical selected occasions. In the 
 item_samples |>
   dplyr::transmute(Poll = poll_label(poll_id), Available = total_people,
     Complete = complete_people, Excluded = excluded, Items = items) |>
-  knitr::kable(format = "latex", booktabs = TRUE, longtable = TRUE, linesep = "",
+  table_evidence(longtable = TRUE,
     caption = "Historical participant sample available to the disjoint-item comparison. Complete participants have scored responses for every matched item at both selected occasions. Excluded counts reflect incomplete paired-item responses, including unavailable forms; these responses are not assigned zero credit.")
 ```

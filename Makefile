@@ -4,21 +4,20 @@ restore:
 	Rscript -e 'renv::restore(prompt = FALSE)'
 
 analysis:
-	Rscript R/01_analysis.R
+	Rscript R/04_run_all.R simulations empirical
 
 estimation: tabs/estimator_comparison.csv
 
-tabs/estimator_comparison.csv: R/irt.R R/estimator_comparison.R R/simulate.R R/02_estimator_comparison.R renv.lock
-	Rscript R/02_estimator_comparison.R
+tabs/estimator_comparison.csv: R/00_common.R R/01_simulations.R R/04_run_all.R renv.lock
+	Rscript R/04_run_all.R estimation
 
 figures: analysis estimation
-	Rscript R/03_figures.R
+	Rscript R/04_run_all.R figures
 
 paper: figures
-	$(MAKE) manuscript
 
-manuscript:
-	Rscript -e 'options(tinytex.install_packages = FALSE); rmarkdown::render("ms/main.Rmd", knit_root_dir = getwd(), quiet = TRUE)'
+paper manuscript:
+	Rscript R/04_run_all.R manuscript
 
 format:
 	Rscript -e 'styler::style_dir("R"); styler::style_dir("tests")'
@@ -33,8 +32,8 @@ check: paper lint test
 
 ci-docker:
 	docker run --rm -v "$(PWD):/project" \
-		-v "$${DP_DATA_ROOT:-$(abspath ../dp-data)}:/dp-data:ro" \
-		-e DP_DATA_ROOT=/dp-data -w /project rocker/verse:4.6.0 \
+		-v "$${DP_DATA_ROOT:-$(abspath ../dp_data)}:/dp_data:ro" \
+		-e DP_DATA_ROOT=/dp_data -w /project rocker/verse:4.6.0 \
 		bash -lc "Rscript -e 'install.packages(\"renv\", repos = \"https://cloud.r-project.org\")' && make restore check"
 
 clean:

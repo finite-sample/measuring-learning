@@ -1,5 +1,3 @@
-read_tab <- \(name) readr::read_csv(file.path("../../tabs", name), show_col_types = FALSE)
-
 test_that("threshold items are known exactly when true knowledge exceeds difficulty", {
   x <- answer_items(c(0.5, 2, 3), difficulty = c(1, 2.5), discrimination = Inf, guess = 0)
   expect_equal(x, c(0, 0.5, 1))

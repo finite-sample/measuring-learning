@@ -1,14 +1,14 @@
 # Data inputs
 
 The analysis uses the maintained 21-poll wide export from
-[dp-data at commit f88da7f](https://github.com/soodoku/dp-data/tree/f88da7fa904cde55044dd3dda9fd337ca26cb8bd).
+[dp_data at commit f88da7f](https://github.com/soodoku/dp_data/tree/f88da7fa904cde55044dd3dda9fd337ca26cb8bd).
 The full commit, upstream paths, schema versions and SHA-256 checksums are in
-[`sources.csv`](sources.csv). Inputs are read directly from the exports in `../dp-data`. Set `DP_DATA_ROOT`
+[`sources.csv`](sources.csv). Inputs are read directly from the exports in `../dp_data`. Set `DP_DATA_ROOT`
 to use another local clone. No input files are copied into this repository.
 The build verifies every input against the recorded SHA-256 checksum and stops
 if a file is missing or changed.
 
-| Source | Path within dp-data |
+| Source | Path within dp_data |
 |---|---|
 | Participant-level scores | `output/polardata/polardata.tab` |
 | Attitude indices | `output/polardata/attitude-indices.tab` |
@@ -16,7 +16,7 @@ if a file is missing or changed.
 | Participant records | `output/analysis/analysis_participants.parquet` |
 | Item catalog | `output/analysis/analysis_items.parquet` |
 
-The upstream [issue register](https://github.com/soodoku/dp-data/blob/f88da7fa904cde55044dd3dda9fd337ca26cb8bd/docs/poll-issues.md)
+The upstream [issue register](https://github.com/soodoku/dp_data/blob/f88da7fa904cde55044dd3dda9fd337ca26cb8bd/docs/poll-issues.md)
 records resolved and unresolved source questions. Those unresolved questions
 are not removed by using these exports.
 
@@ -41,9 +41,9 @@ and education splits are regenerated in `tabs/who_learns.csv`.
 
 ## Source revision
 
-Use the dp-data revision recorded in `sources.csv`. GitHub Actions checks out
-that revision separately, and `make ci-docker` mounts the local dp-data clone
-read-only. Neither build changes dp-data.
+Use the dp_data revision recorded in `sources.csv`. GitHub Actions checks out
+that revision separately, and `make ci-docker` mounts the local dp_data clone
+read-only. Neither build changes dp_data.
 
 To adopt a future correction, update the revision and reviewed hashes in
 `sources.csv`, run `make check`, and document changes in samples, estimates and

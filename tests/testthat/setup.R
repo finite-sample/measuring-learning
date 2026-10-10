@@ -1,1 +1,2 @@
-purrr::walk(list.files("../../R", pattern = "^[a-z].*\\.R$", full.names = TRUE), source)
+source("../../R/00_common.R")
+load_analysis()

@@ -178,3 +178,126 @@ finite_quantile <- function(x, probability) {
 }
 
 finite_median <- function(x) finite_quantile(x, 0.5)
+
+# Does education above the poll's participant median predict the learning proxy?
+# observed gain alone, or post-process knowledge controlling for initial
+# knowledge (equivalently, gain controlling for initial knowledge).
+who_learns <- function(polardata) {
+  data <- polardata |>
+    dplyr::filter(!is.na(education_above_median), !is.na(t1know), !is.na(t2know), !is.na(pollgroup)) |>
+    dplyr::mutate(high_education = as.numeric(education_above_median), gain = t2know - t1know)
+  specs <- list(
+    "Observed gain" = gain ~ high_education,
+    "Post-process knowledge" = t2know ~ high_education,
+    "Post-process knowledge given initial" = t2know ~ high_education + t1know
+  )
+  by_poll <- purrr::imap(specs, \(formula, label) {
+    data |>
+      dplyr::group_split(pollname) |>
+      purrr::map(\(poll) {
+        fit <- stats::lm(formula, data = poll)
+        vc <- sandwich::vcovCL(fit, cluster = poll$pollgroup, type = "HC1")
+        tibble::tibble(
+          pollname = poll$pollname[[1]], proxy = label,
+          n = nrow(poll), groups = dplyr::n_distinct(poll$pollgroup),
+          n_above = sum(poll$high_education), n_at_or_below = sum(1 - poll$high_education),
+          estimate = stats::coef(fit)[["high_education"]],
+          std_error = sqrt(vc["high_education", "high_education"])
+        )
+      }) |>
+      purrr::list_rbind()
+  }) |>
+    purrr::list_rbind()
+  pooled <- by_poll |>
+    dplyr::group_split(proxy) |>
+    purrr::map(\(x) {
+      fit <- bayesmeta::bayesmeta(y = x$estimate, sigma = x$std_error, labels = x$pollname, tau.prior = tau_prior)
+      tibble::tibble(
+        proxy = x$proxy[[1]], pollname = "Pooled estimate",
+        estimate = fit$summary["median", "mu"],
+        lower = fit$summary["95% lower", "mu"], upper = fit$summary["95% upper", "mu"]
+      )
+    }) |>
+    purrr::list_rbind()
+  dplyr::bind_rows(
+    dplyr::mutate(by_poll, lower = estimate - 1.96 * std_error, upper = estimate + 1.96 * std_error),
+    pooled
+  )
+}
+
+tau_prior <- \(t) bayesmeta::dhalfnormal(t, scale = 0.1)
+
+# Share of attitude indices on which each proxy predicts moving with the net
+# change, and how often it does so at conventional significance.
+summarise_attitudes <- function(regressions) {
+  regressions |>
+    dplyr::summarise(
+      indices = dplyr::n(),
+      mean_estimate = mean(estimate),
+      share_positive = mean(estimate > 0),
+      share_significant_positive = mean(estimate / std_error > 1.96),
+      share_significant_negative = mean(estimate / std_error < -1.96),
+      .by = proxy
+    )
+}
+
+# Attitude change on a learning proxy and the distance from one's small group,
+# one regression per poll and attitude index (the model of the paper's opening
+# illustration). The learning coefficient is multiplied by the sign of the
+# poll's net change on that index, so a positive value means those who learned
+# more moved further in the direction the sample moved, and is expressed per
+# standard deviation of the proxy.
+index_regressions <- function(polardata, indices) {
+  purrr::pmap(indices, function(dpnum, att_index, t1var, t2_t3var, ...) {
+    poll <- polardata |>
+      dplyr::filter(.data$dpnum == .env$dpnum) |>
+      dplyr::transmute(
+        group = pollgroup,
+        a1 = .data[[t1var]], a2 = .data[[t2_t3var]],
+        x1 = t1know, x2 = t2know
+      ) |>
+      dplyr::filter(!is.na(group), !is.na(a1), !is.na(a2), !is.na(x1), !is.na(x2)) |>
+      dplyr::mutate(
+        group_distance = a1 - (sum(a1) - a1) / (dplyr::n() - 1),
+        .by = group
+      ) |>
+      dplyr::filter(is.finite(group_distance)) |>
+      dplyr::mutate(change = a2 - a1, gain = x2 - x1)
+    if (nrow(poll) < 50 || stats::sd(poll$change) == 0) {
+      return(NULL)
+    }
+    direction <- sign(mean(poll$change))
+    fit_proxy <- function(formula, proxy) {
+      fit <- stats::lm(formula, data = poll)
+      vc <- sandwich::vcovCL(fit, cluster = ~group, type = "HC1")
+      scale <- direction * stats::sd(poll[[proxy]])
+      tibble::tibble(estimate = stats::coef(fit)[[proxy]] * scale, std_error = sqrt(vc[proxy, proxy]) * abs(scale))
+    }
+    dplyr::bind_rows(
+      gain = fit_proxy(change ~ gain + group_distance, "gain"),
+      x2 = fit_proxy(change ~ x2 + group_distance, "x2"),
+      x2_given_x1 = fit_proxy(change ~ x2 + x1 + group_distance, "x2"),
+      x1 = fit_proxy(change ~ x1 + group_distance, "x1"),
+      .id = "proxy"
+    ) |>
+      dplyr::mutate(dpnum = dpnum, index = att_index, n = nrow(poll), net_change = mean(poll$change), .before = 1)
+  }) |>
+    purrr::list_rbind()
+}
+
+run_empirical <- function() {
+  verify_sources()
+  polardata <- read_polardata()
+  indices <- read_indices()
+  write_tab(who_learns(polardata), "who_learns.csv")
+
+  attitudes <- index_regressions(polardata, indices)
+  write_tab(attitudes, "attitudes.csv")
+  write_tab(summarise_attitudes(attitudes), "attitudes_summary.csv")
+
+  validation <- validate_item_subsets(read_item_validation())
+  write_tab(validation$results, "item_validation.csv")
+  write_tab(validation$partitions, "item_partitions.csv")
+  write_tab(validation$samples, "item_validation_samples.csv")
+  write_tab(summarise_item_validation(validation$results), "item_validation_summary.csv")
+}

@@ -39,7 +39,7 @@ test_that("conflicting participant IDs cannot silently enter the analysis", {
 })
 
 
-test_that("sources are read directly from the configured dp-data checkout", {
+test_that("sources are read directly from the configured dp_data checkout", {
   root <- withr::local_tempdir()
   withr::local_envvar(DP_DATA_ROOT = root)
   expect_identical(source_path("items"), file.path(root, "output/analysis/analysis_items.parquet"))
